@@ -1,0 +1,42 @@
+<%- include('../partials/header', { title: 'Organizations' }) %>
+
+<% if (error) { %><div class="error"><%= error %></div><% } %>
+
+<table>
+  <thead>
+    <tr><th>Color</th><th>Name</th><th>Abbreviation</th><th></th></tr>
+  </thead>
+  <tbody>
+    <% organizations.forEach(function(org) { %>
+      <tr>
+        <td><span class="swatch" style="background:<%= org.color %>"></span></td>
+        <td><%= org.name %></td>
+        <td><%= org.abbreviation %></td>
+        <td class="actions">
+          <form method="post" action="/admin/organizations/<%= org.id %>/delete" onsubmit="return confirm('Delete this organization?');">
+            <button type="submit" class="secondary">Delete</button>
+          </form>
+        </td>
+      </tr>
+    <% }) %>
+    <% if (organizations.length === 0) { %>
+      <tr><td colspan="4" class="muted">No organizations yet.</td></tr>
+    <% } %>
+  </tbody>
+</table>
+
+<h2>Add organization</h2>
+<form method="post" action="/admin/organizations">
+  <label for="name">Name</label>
+  <input type="text" id="name" name="name" required>
+
+  <label for="abbreviation">Abbreviation</label>
+  <input type="text" id="abbreviation" name="abbreviation" required>
+
+  <label for="color">Color</label>
+  <input type="color" id="color" name="color" value="#111111">
+
+  <button type="submit">Add Organization</button>
+</form>
+
+<%- include('../partials/footer') %>

@@ -1,0 +1,23 @@
+<%- include('../partials/header', { title: 'Dashboard' }) %>
+
+<div class="stat-row">
+  <div class="stat">
+    <span class="n"><%= massCenterCount %></span>
+    <span class="label">Mass Centers</span>
+  </div>
+  <div class="stat">
+    <span class="n"><%= organizationCount %></span>
+    <span class="label">Organizations</span>
+  </div>
+  <div class="stat">
+    <span class="n"><%= pendingCount %></span>
+    <span class="label">Pending Candidates</span>
+  </div>
+</div>
+
+<h2>Add a pin</h2>
+<p>Add a single address by hand from the <a href="/admin/mass-centers">Mass Centers</a> page,
+   or <a href="/admin/scrape">scrape a URL</a> to find several addresses at once and review
+   them before they're added to the map.</p>
+
+<%- include('../partials/footer') %>

@@ -1,0 +1,244 @@
+/* Tufte-inspired: serif typography, black on white, hairline rules,
+   no border-radius anywhere, no hover transitions or animations. */
+
+:root {
+  --ink: #111;
+  --paper: #fff;
+  --rule: #111;
+  --muted: #555;
+}
+
+* {
+  box-sizing: border-box;
+  border-radius: 0 !important;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', Times, serif;
+}
+
+body {
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+a {
+  color: var(--ink);
+}
+
+a:hover {
+  color: var(--ink);
+}
+
+h1, h2, h3 {
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+h1 {
+  font-size: 1.6rem;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 0.4rem;
+}
+
+h2 {
+  font-size: 1.2rem;
+  margin-top: 2rem;
+}
+
+.container {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+
+nav.admin-nav {
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 0.75rem;
+  margin-bottom: 1.5rem;
+  font-variant: small-caps;
+  letter-spacing: 0.03em;
+}
+
+nav.admin-nav a {
+  text-decoration: none;
+  margin-right: 1.5rem;
+}
+
+nav.admin-nav a:hover {
+  text-decoration: underline;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+th, td {
+  text-align: left;
+  padding: 0.4rem 0.6rem 0.4rem 0;
+  border-bottom: 1px solid #ccc;
+  vertical-align: top;
+}
+
+th {
+  font-weight: 400;
+  font-variant: small-caps;
+  border-bottom: 1px solid var(--rule);
+}
+
+form {
+  margin: 1.5rem 0;
+  border: 1px solid var(--rule);
+  padding: 1rem 1.25rem;
+}
+
+label {
+  display: block;
+  font-variant: small-caps;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-top: 0.75rem;
+}
+
+input[type="text"],
+input[type="url"],
+input[type="email"],
+select {
+  width: 100%;
+  font: inherit;
+  padding: 0.35rem 0.4rem;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink);
+  margin-top: 0.15rem;
+}
+
+input[type="color"] {
+  width: 4rem;
+  height: 2rem;
+  border: 1px solid var(--rule);
+  padding: 0;
+  margin-top: 0.15rem;
+  background: var(--paper);
+}
+
+button, input[type="submit"] {
+  font: inherit;
+  font-variant: small-caps;
+  background: var(--ink);
+  color: var(--paper);
+  border: 1px solid var(--ink);
+  padding: 0.4rem 1rem;
+  margin-top: 1rem;
+  cursor: pointer;
+}
+
+button:hover, input[type="submit"]:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+button.secondary, .link-button {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+button.secondary:hover {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.error {
+  border: 1px solid var(--ink);
+  padding: 0.6rem 0.8rem;
+  margin: 1rem 0;
+}
+
+.swatch {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  border: 1px solid var(--ink);
+  vertical-align: middle;
+  margin-right: 0.35em;
+}
+
+.stat-row {
+  display: flex;
+  gap: 3rem;
+  margin: 1.5rem 0;
+}
+
+.stat-row .stat .n {
+  font-size: 2rem;
+  display: block;
+}
+
+.stat-row .stat .label {
+  font-variant: small-caps;
+  color: var(--muted);
+}
+
+.actions form {
+  display: inline-block;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.actions button {
+  margin-top: 0;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* --- Public map page --- */
+
+#map {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* Render map tiles in grayscale to keep the black-and-white theme. */
+.leaflet-tile-pane {
+  filter: grayscale(1) contrast(1.05);
+}
+
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  border-radius: 0;
+  border: 1px solid var(--ink);
+  box-shadow: none;
+}
+
+.leaflet-popup-content {
+  font-family: 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', Times, serif;
+  margin: 0.6rem 0.8rem;
+}
+
+.leaflet-popup-content h3 {
+  margin: 0 0 0.2rem;
+  font-size: 1rem;
+}
+
+.leaflet-bar a {
+  border-radius: 0 !important;
+}
+
+.pin-marker {
+  border: 1px solid #111;
+  width: 10px;
+  height: 10px;
+  display: block;
+}

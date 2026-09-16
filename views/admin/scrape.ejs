@@ -1,0 +1,25 @@
+<%- include('../partials/header', { title: 'Scrape URL' }) %>
+
+<% if (error) { %><div class="error"><%= error %></div><% } %>
+
+<p class="muted">
+  Fetches the page, looks for street addresses in the text, and geocodes each one found.
+  Nothing is added to the map until you review and confirm the results.
+</p>
+
+<form method="post" action="/admin/scrape">
+  <label for="url">URL</label>
+  <input type="url" id="url" name="url" placeholder="https://example.org/locations" required>
+
+  <label for="organization_id">Organization</label>
+  <select id="organization_id" name="organization_id">
+    <option value="">—</option>
+    <% organizations.forEach(function(org) { %>
+      <option value="<%= org.id %>"><%= org.name %> (<%= org.abbreviation %>)</option>
+    <% }) %>
+  </select>
+
+  <button type="submit">Scrape</button>
+</form>
+
+<%- include('../partials/footer') %>
