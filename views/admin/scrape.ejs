@@ -3,17 +3,20 @@
 <% if (error) { %><div class="error"><%= error %></div><% } %>
 
 <p class="muted">
-  Fetches the page, looks for street addresses in the text, and geocodes each one found.
-  Nothing is added to the map until you review and confirm the results.
+  Fetches the page and looks for Mass center listings: title, address (or city/state
+  if no street address is given), and organization. Unrecognized organization
+  abbreviations are created automatically — rename them on the Organizations page.
+  Nothing is geocoded yet and nothing is added to the map until you review and confirm
+  candidates, either one at a time or with the background "Geocode All Pending" job.
 </p>
 
 <form method="post" action="/admin/scrape">
   <label for="url">URL</label>
   <input type="url" id="url" name="url" placeholder="https://example.org/locations" required>
 
-  <label for="organization_id">Organization</label>
+  <label for="organization_id">Organization <span class="muted">(optional — only needed if this page doesn't label each listing with an organization code)</span></label>
   <select id="organization_id" name="organization_id">
-    <option value="">—</option>
+    <option value="">Detect automatically per listing</option>
     <% organizations.forEach(function(org) { %>
       <option value="<%= org.id %>"><%= org.name %> (<%= org.abbreviation %>)</option>
     <% }) %>

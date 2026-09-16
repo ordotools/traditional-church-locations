@@ -29,15 +29,27 @@ The admin panel has no authentication yet (see ROADMAP.md).
 ## How pins get added
 
 1. **By hand** — Admin → Mass Centers → enter a title, address, and
-   organization. The address is geocoded immediately.
-2. **By scraping a URL** — Admin → Scrape URL → enter a page URL and an
-   organization. The page's text is scanned for street addresses, each
-   candidate is geocoded, and nothing is saved to the map until you
-   review and confirm it under Admin → Review Candidates (where you also
-   supply the title, since a scraped page rarely labels each address).
+   organization. The address is geocoded immediately. If geocoding fails or
+   is wrong (OpenStreetMap has real gaps, especially on rural roads), you can
+   enter latitude/longitude directly instead.
+2. **By scraping a URL** — Admin → Scrape URL → enter a page URL. The page is
+   parsed for listings (title, address, organization), handling either an
+   HTML table layout (one row per location) or loose paragraph text. If a
+   listing has no street address, it falls back to a city- or state-level
+   pin. Organization abbreviations that aren't in your Organizations table
+   yet are created automatically — rename them from the Organizations page.
+
+   Nothing is geocoded during scraping (a large directory can have hundreds
+   of entries, which would block the request for many minutes). Instead, on
+   the Review Candidates page you can either confirm candidates one at a
+   time (each is geocoded on demand) or click "Geocode All Pending" to
+   geocode the rest in the background at a configurable interval
+   (`GEOCODE_INTERVAL_MS`, default 5s) — the page shows progress and you can
+   keep confirming already-geocoded candidates while it runs.
 
 ## Data model
 
 - `organizations` — name, abbreviation, color
-- `mass_centers` — the pins: title, address, lat/lng, organization
-- `scrape_candidates` — addresses found by scraping, pending review
+- `mass_centers` — the pins: title, address, lat/lng, precision (exact/city/state), organization
+- `scrape_candidates` — listings found by scraping, pending review: title,
+  address (or city/state fallback), precision, organization, geocoded lat/lng

@@ -1,7 +1,8 @@
 const express = require('express');
 const db = require('../db');
-const { geocodeAddress, sleep } = require('../geocode');
-const { scrapeAddresses } = require('../scraper');
+const { geocodeAddress } = require('../geocode');
+const { scrapeCandidates } = require('../scraper');
+const geocodeQueue = require('../geocodeQueue');
 
 const router = express.Router();
 
@@ -17,8 +18,27 @@ function parseManualCoords(latitude, longitude) {
   return { latitude: lat, longitude: lng };
 }
 
+// A rotating palette so auto-created organizations get visually distinct
+// colors rather than all defaulting to black.
+const AUTO_COLORS = ['#a6192e', '#00594c', '#1d3557', '#7b3f00', '#4a154b', '#2a6f2b', '#8c1c13', '#003554'];
+
 function getOrganizations() {
   return db.prepare('SELECT * FROM organizations ORDER BY name').all();
+}
+
+// Looks up an organization by abbreviation (case-insensitive); auto-creates
+// one if it doesn't exist yet, so scraping doesn't stall on unknown codes.
+// The name starts out the same as the abbreviation — rename it on the
+// Organizations page once you know what it stands for.
+function getOrCreateOrganizationByAbbreviation(abbreviation) {
+  if (!abbreviation) return null;
+  const existing = db.prepare('SELECT * FROM organizations WHERE abbreviation = ? COLLATE NOCASE').get(abbreviation);
+  if (existing) return existing.id;
+  const color = AUTO_COLORS[db.prepare('SELECT COUNT(*) AS n FROM organizations').get().n % AUTO_COLORS.length];
+  const info = db
+    .prepare('INSERT INTO organizations (name, abbreviation, color) VALUES (?, ?, ?)')
+    .run(abbreviation, abbreviation, color);
+  return info.lastInsertRowid;
 }
 
 function getMassCenters() {
@@ -71,6 +91,29 @@ router.post('/organizations', (req, res) => {
   res.redirect('/admin/organizations');
 });
 
+router.get('/organizations/:id/edit', (req, res) => {
+  const organization = db.prepare('SELECT * FROM organizations WHERE id = ?').get(req.params.id);
+  if (!organization) return res.status(404).send('Not found');
+  res.render('admin/organization_edit', { organization, error: null });
+});
+
+router.post('/organizations/:id', (req, res) => {
+  const { name, abbreviation, color } = req.body;
+  if (!name || !abbreviation) {
+    return res.render('admin/organization_edit', {
+      organization: { ...req.body, id: req.params.id },
+      error: 'Name and abbreviation are required.',
+    });
+  }
+  db.prepare('UPDATE organizations SET name = ?, abbreviation = ?, color = ? WHERE id = ?').run(
+    name.trim(),
+    abbreviation.trim(),
+    color || '#000000',
+    req.params.id
+  );
+  res.redirect('/admin/organizations');
+});
+
 router.post('/organizations/:id/delete', (req, res) => {
   db.prepare('DELETE FROM organizations WHERE id = ?').run(req.params.id);
   res.redirect('/admin/organizations');
@@ -92,7 +135,8 @@ router.post('/mass-centers', async (req, res) => {
     });
   }
   try {
-    const coords = parseManualCoords(latitude, longitude) || (await geocodeAddress(address));
+    const manualCoords = parseManualCoords(latitude, longitude);
+    const coords = manualCoords || (await geocodeAddress(address));
     if (!coords) {
       return res.render('admin/mass_centers', {
         massCenters: getMassCenters(),
@@ -168,28 +212,26 @@ router.post('/scrape', async (req, res) => {
     return res.render('admin/scrape', { organizations: getOrganizations(), error: 'URL is required.' });
   }
   try {
-    const addresses = await scrapeAddresses(url);
-    if (!addresses.length) {
+    const candidates = await scrapeCandidates(url);
+    if (!candidates.length) {
       return res.render('admin/scrape', {
         organizations: getOrganizations(),
         error: 'No addresses were found on that page.',
       });
     }
 
+    // Extraction only — no geocoding here. A directory this size can easily
+    // have hundreds of entries, and geocoding all of them synchronously
+    // inside this one request would take many minutes and risk timing out.
+    // Geocoding happens later: per-candidate when you confirm it, or in bulk
+    // via the "Geocode All Pending" background job on the review page.
     const insert = db.prepare(
-      `INSERT INTO scrape_candidates (source_url, organization_id, raw_address, latitude, longitude)
-       VALUES (?, ?, ?, ?, ?)`
+      `INSERT INTO scrape_candidates (source_url, organization_id, title, raw_address, city, state, precision)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     );
-
-    for (const address of addresses) {
-      let coords = null;
-      try {
-        coords = await geocodeAddress(address);
-      } catch {
-        coords = null;
-      }
-      insert.run(url, organization_id || null, address, coords?.latitude ?? null, coords?.longitude ?? null);
-      await sleep(1000); // respect Nominatim's 1 request/second policy
+    for (const c of candidates) {
+      const organizationId = organization_id || getOrCreateOrganizationByAbbreviation(c.organizationAbbreviation);
+      insert.run(url, organizationId || null, c.title, c.address, c.city, c.state, c.precision);
     }
 
     res.redirect('/admin/candidates');
@@ -199,34 +241,58 @@ router.post('/scrape', async (req, res) => {
 });
 
 router.get('/candidates', (req, res) => {
-  res.render('admin/candidates', { candidates: getPendingCandidates(), error: null });
+  res.render('admin/candidates', { candidates: getPendingCandidates(), error: null, queue: geocodeQueue.getStatus() });
 });
 
-router.post('/candidates/:id/confirm', (req, res) => {
+router.post('/candidates/geocode-all', (req, res) => {
+  geocodeQueue.startGeocodingAllPending();
+  res.redirect('/admin/candidates');
+});
+
+router.post('/candidates/:id/confirm', async (req, res) => {
   const { title, latitude: manualLat, longitude: manualLng } = req.body;
   const candidate = db.prepare('SELECT * FROM scrape_candidates WHERE id = ?').get(req.params.id);
   if (!candidate) return res.status(404).send('Not found');
 
+  const renderError = (error) =>
+    res.render('admin/candidates', { candidates: getPendingCandidates(), error, queue: geocodeQueue.getStatus() });
+
+  if (!title) return renderError('A title is required to confirm a pin.');
+
   let coords;
   try {
-    coords = parseManualCoords(manualLat, manualLng) || (candidate.latitude !== null ? candidate : null);
+    coords = parseManualCoords(manualLat, manualLng);
   } catch (err) {
-    return res.render('admin/candidates', { candidates: getPendingCandidates(), error: err.message });
+    return renderError(err.message);
   }
 
-  if (!title || !coords) {
-    return res.render('admin/candidates', {
-      candidates: getPendingCandidates(),
-      error: !title
-        ? 'A title is required to confirm a pin.'
-        : 'This address could not be geocoded. Enter latitude/longitude manually to confirm it.',
-    });
+  if (!coords && candidate.latitude !== null) {
+    coords = { latitude: candidate.latitude, longitude: candidate.longitude };
+  }
+
+  if (!coords) {
+    // Not geocoded yet (bulk job hasn't reached it) — geocode now, on demand,
+    // so confirming one at a time never has to wait for the background job.
+    try {
+      coords = await geocodeAddress(candidate.raw_address);
+    } catch (err) {
+      return renderError(err.message);
+    }
+    if (!coords) return renderError('This address could not be geocoded. Enter latitude/longitude manually to confirm it.');
   }
 
   db.prepare(
-    `INSERT INTO mass_centers (title, address, latitude, longitude, organization_id, source_url)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  ).run(title.trim(), candidate.raw_address, coords.latitude, coords.longitude, candidate.organization_id, candidate.source_url);
+    `INSERT INTO mass_centers (title, address, latitude, longitude, precision, organization_id, source_url)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    title.trim(),
+    candidate.raw_address,
+    coords.latitude,
+    coords.longitude,
+    candidate.precision,
+    candidate.organization_id,
+    candidate.source_url
+  );
   db.prepare("UPDATE scrape_candidates SET status = 'confirmed' WHERE id = ?").run(req.params.id);
   res.redirect('/admin/candidates');
 });

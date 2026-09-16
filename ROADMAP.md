@@ -1,11 +1,21 @@
 # Roadmap
 
-## Now (v0.1)
+## Now (v0.2)
 
-- Map with pan/zoom showing all pins, colored by organization
-- Admin: add a pin by address (geocoded on save)
-- Admin: scrape a URL for addresses, geocode candidates, review/confirm before they hit the map
-- Admin: organization management (name, abbreviation, color)
+- Map with pan/zoom showing all pins, colored by organization; approximate
+  (city/state-level) pins are marked as such in the popup
+- Admin: add a pin by address (geocoded on save), with a manual lat/lng
+  override for addresses OpenStreetMap can't find
+- Admin: scrape a URL for Mass center listings — extracts title, address (or
+  falls back to city/state when no street address is given), and organization
+  from either an HTML table layout or freeform text; auto-creates unrecognized
+  organization abbreviations
+- Admin: geocoding is decoupled from scraping — confirm candidates one at a
+  time (geocoded on demand) or run a background "Geocode All Pending" job at a
+  configurable interval, so a directory with hundreds of entries doesn't block
+  the page or blow through Nominatim's rate limit
+- Admin: organization management (name, abbreviation, color), editable after
+  auto-creation
 - SQLite storage, no build step
 
 ## Next
@@ -13,10 +23,10 @@
 - **Scheduled re-scraping** — periodically re-run scraping for saved source URLs
   (a cron-style job) to pick up new or changed locations automatically, landing
   as new candidates for review rather than silently overwriting existing pins.
-- **Better address extraction** — the current scraper is a US-format regex
-  over page text. Improve it to handle non-US addresses, `schema.org`/JSON-LD
-  structured data, and PDF locator pages; try to infer a title from nearby
-  headings so it can be pre-filled instead of typed by hand.
+- **Broader extraction formats** — the scraper currently handles two page
+  shapes: an HTML table (one row per location) and loose paragraph text. Add
+  `schema.org`/JSON-LD structured data and PDF locator pages; improve title
+  detection for freeform pages where a table isn't available.
 - **Edit history** — track who/when/what changed on a mass center, with the
   ability to revert.
 

@@ -4,6 +4,11 @@
 const CONTACT = process.env.GEOCODE_CONTACT || 'set-GEOCODE_CONTACT-env-var';
 const USER_AGENT = `traditional-church-locations/0.1 (${CONTACT})`;
 
+// Bulk geocoding (e.g. confirming many scraped candidates) waits this long
+// between requests. Nominatim's policy requires at least 1000ms; default to
+// something more conservative since we may be issuing many in a row.
+const BULK_INTERVAL_MS = parseInt(process.env.GEOCODE_INTERVAL_MS, 10) || 5000;
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -17,4 +22,4 @@ async function geocodeAddress(address) {
   return { latitude: parseFloat(results[0].lat), longitude: parseFloat(results[0].lon) };
 }
 
-module.exports = { geocodeAddress, sleep };
+module.exports = { geocodeAddress, sleep, BULK_INTERVAL_MS };

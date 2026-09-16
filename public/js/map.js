@@ -27,9 +27,11 @@ fetch('/api/pins')
         ? `${pin.organization_name}${pin.organization_abbreviation ? ' (' + pin.organization_abbreviation + ')' : ''}`
         : '';
 
+      const approx = pin.precision && pin.precision !== 'exact';
+
       marker.bindPopup(
         `<h3>${escapeHtml(pin.title)}</h3>` +
-          `<div>${escapeHtml(pin.address)}</div>` +
+          `<div>${escapeHtml(pin.address)}${approx ? ' <em>(approximate)</em>' : ''}</div>` +
           (orgLine ? `<div class="muted">${escapeHtml(orgLine)}</div>` : '')
       );
     });
