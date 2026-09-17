@@ -1,12 +1,13 @@
 <%- include('../partials/header', { title: 'Edit Mass Center' }) %>
 
 <% if (error) { %><div class="error"><%= error %></div><% } %>
+<% if (notice) { %><div class="notice"><%= notice %></div><% } %>
 
 <form method="post" action="/admin/mass-centers/<%= massCenter.id %>">
   <label for="title">Title</label>
   <input type="text" id="title" name="title" value="<%= massCenter.title %>" required>
 
-  <label for="address">Address</label>
+  <label for="address">Address <span class="muted">(changing this re-geocodes on save, unless you set lat/lng below)</span></label>
   <input type="text" id="address" name="address" value="<%= massCenter.address %>" required>
 
   <label for="organization_id">Organization</label>

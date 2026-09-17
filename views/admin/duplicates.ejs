@@ -1,0 +1,73 @@
+<%- include('../partials/header', { title: 'Duplicates' }) %>
+
+<% if (error) { %><div class="error"><%= error %></div><% } %>
+
+<p class="muted">Pins that geocode within 150m of each other, or share a near-identical title. Keep one side
+   as-is, merge the two into one record, or mark the pair as not actually a duplicate.</p>
+
+<% if (pairs.length === 0) { %>
+  <p class="muted">No potential duplicates found.</p>
+<% } %>
+
+<% pairs.forEach(function(p) { %>
+  <div style="border:1px solid #ccc;border-radius:6px;padding:1rem;margin-bottom:1.5rem;">
+    <div class="muted">
+      <% if (p.closeBy) { %>~<%= Math.round(p.distanceMeters) %>m apart<% } %>
+      <% if (p.closeBy && p.similarTitle) { %> · <% } %>
+      <% if (p.similarTitle) { %>titles <%= Math.round(p.similarity * 100) %>% similar<% } %>
+    </div>
+
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+      <% [p.a, p.b].forEach(function(c) { %>
+        <div style="flex:1;min-width:220px;">
+          <strong><%= c.title %></strong>
+          <div class="muted"><%= c.address %></div>
+          <div class="muted"><%= c.organization_name || '—' %></div>
+          <div class="muted"><%= c.latitude.toFixed(5) %>, <%= c.longitude.toFixed(5) %></div>
+          <form method="post" action="/admin/duplicates/<%= p.a.id %>/<%= p.b.id %>/keep/<%= c.id %>"
+            onsubmit="return confirm('Keep this record and delete the other one?');">
+            <button type="submit">Keep this one, delete the other</button>
+          </form>
+        </div>
+      <% }) %>
+    </div>
+
+    <details style="margin-top:0.75rem;">
+      <summary>Merge into one record</summary>
+      <form method="post" action="/admin/duplicates/<%= p.a.id %>/<%= p.b.id %>/merge">
+        <input type="hidden" name="keep_id" value="<%= p.a.id %>">
+
+        <label for="title-<%= p.a.id %>-<%= p.b.id %>">Title</label>
+        <input type="text" id="title-<%= p.a.id %>-<%= p.b.id %>" name="title" value="<%= p.a.title %>" required>
+
+        <label for="address-<%= p.a.id %>-<%= p.b.id %>">Address</label>
+        <input type="text" id="address-<%= p.a.id %>-<%= p.b.id %>" name="address" value="<%= p.a.address %>" required>
+
+        <label for="organization_id-<%= p.a.id %>-<%= p.b.id %>">Organization</label>
+        <select id="organization_id-<%= p.a.id %>-<%= p.b.id %>" name="organization_id">
+          <option value="">—</option>
+          <% organizations.forEach(function(org) { %>
+            <option value="<%= org.id %>" <%= String(org.id) === String(p.a.organization_id) ? 'selected' : '' %>>
+              <%= org.name %> (<%= org.abbreviation %>)
+            </option>
+          <% }) %>
+        </select>
+
+        <label for="latitude-<%= p.a.id %>-<%= p.b.id %>">Latitude / Longitude</label>
+        <div style="display:flex;gap:0.5rem;">
+          <input type="text" id="latitude-<%= p.a.id %>-<%= p.b.id %>" name="latitude" value="<%= p.a.latitude %>" required>
+          <input type="text" id="longitude-<%= p.a.id %>-<%= p.b.id %>" name="longitude" value="<%= p.a.longitude %>" required>
+        </div>
+        <p class="muted">Pre-filled from the first record above — edit any field before saving. The other record is deleted on merge.</p>
+
+        <button type="submit">Merge</button>
+      </form>
+    </details>
+
+    <form method="post" action="/admin/duplicates/<%= p.a.id %>/<%= p.b.id %>/dismiss" style="margin-top:0.5rem;">
+      <button type="submit" class="secondary">Not a duplicate</button>
+    </form>
+  </div>
+<% }) %>
+
+<%- include('../partials/footer') %>

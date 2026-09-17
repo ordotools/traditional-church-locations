@@ -3,6 +3,7 @@ const db = require('../db');
 const { geocodeAddress } = require('../geocode');
 const { scrapeCandidates } = require('../scraper');
 const geocodeQueue = require('../geocodeQueue');
+const duplicates = require('../duplicates');
 
 const router = express.Router();
 
@@ -165,7 +166,11 @@ router.post('/mass-centers', async (req, res) => {
 router.get('/mass-centers/:id/edit', (req, res) => {
   const massCenter = db.prepare('SELECT * FROM mass_centers WHERE id = ?').get(req.params.id);
   if (!massCenter) return res.status(404).send('Not found');
-  res.render('admin/mass_center_edit', { massCenter, organizations: getOrganizations(), error: null });
+  const notice =
+    req.query.regeocoded === '1'
+      ? `Address changed — re-geocoded to ${massCenter.latitude.toFixed(5)}, ${massCenter.longitude.toFixed(5)}.`
+      : null;
+  res.render('admin/mass_center_edit', { massCenter, organizations: getOrganizations(), error: null, notice });
 });
 
 router.post('/mass-centers/:id', async (req, res) => {
@@ -176,15 +181,17 @@ router.post('/mass-centers/:id', async (req, res) => {
   try {
     let { latitude, longitude } = existing;
     const manualCoords = parseManualCoords(manualLat, manualLng);
+    const addressChanged = address.trim() !== existing.address;
     if (manualCoords) {
       ({ latitude, longitude } = manualCoords);
-    } else if (address.trim() !== existing.address) {
+    } else if (addressChanged) {
       const coords = await geocodeAddress(address);
       if (!coords) {
         return res.render('admin/mass_center_edit', {
           massCenter: { ...existing, title, address, organization_id },
           organizations: getOrganizations(),
           error: `Could not find coordinates for "${address}". You can enter latitude/longitude manually below instead.`,
+          notice: null,
         });
       }
       ({ latitude, longitude } = coords);
@@ -193,12 +200,15 @@ router.post('/mass-centers/:id', async (req, res) => {
       `UPDATE mass_centers SET title = ?, address = ?, latitude = ?, longitude = ?, organization_id = ?, updated_at = datetime('now')
        WHERE id = ?`
     ).run(title.trim(), address.trim(), latitude, longitude, organization_id || null, req.params.id);
-    res.redirect('/admin/mass-centers');
+    res.redirect(
+      addressChanged && !manualCoords ? `/admin/mass-centers/${req.params.id}/edit?regeocoded=1` : '/admin/mass-centers'
+    );
   } catch (err) {
     res.render('admin/mass_center_edit', {
       massCenter: { ...existing, title, address, organization_id },
       organizations: getOrganizations(),
       error: err.message,
+      notice: null,
     });
   }
 });
@@ -210,43 +220,110 @@ router.post('/mass-centers/:id/delete', (req, res) => {
 
 // --- Scraping --------------------------------------------------------------
 
+function getSavedSources() {
+  return db
+    .prepare(
+      `SELECT ss.*, o.name AS organization_name, o.abbreviation AS organization_abbreviation
+       FROM saved_sources ss LEFT JOIN organizations o ON o.id = ss.organization_id
+       ORDER BY ss.last_scraped_at IS NULL, ss.last_scraped_at DESC`
+    )
+    .all();
+}
+
+// Records/updates the "previously scraped URLs" list so a source can be
+// re-run later without having to re-find the site. Title/note are left alone
+// here — they're filled in by hand afterward as a reminder of what's there.
+function touchSavedSource(url, organizationId) {
+  db.prepare(
+    `INSERT INTO saved_sources (url, organization_id, last_scraped_at) VALUES (?, ?, datetime('now'))
+     ON CONFLICT(url) DO UPDATE SET
+       organization_id = COALESCE(excluded.organization_id, organization_id),
+       last_scraped_at = excluded.last_scraped_at`
+  ).run(url, organizationId || null);
+}
+
+// Fetches a URL, extracts candidates, and inserts them for Scrape Review.
+// Extraction only — no geocoding here. A directory this size can easily
+// have hundreds of entries, and geocoding all of them synchronously inside
+// this one request would take many minutes and risk timing out. Candidates
+// go to Scrape Review first; geocoding happens after approval, either
+// per-candidate on confirm or in bulk via the "Geocode All Pending" job.
+// Throws if the fetch fails; returns the candidate count (0 = none found).
+async function runScrape(url, organizationId) {
+  const candidates = await scrapeCandidates(url);
+  if (!candidates.length) return 0;
+
+  const insert = db.prepare(
+    `INSERT INTO scrape_candidates (source_url, organization_id, title, raw_address, city, state, precision)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  );
+  for (const c of candidates) {
+    const candidateOrgId = organizationId || getOrCreateOrganizationByAbbreviation(c.organizationAbbreviation);
+    insert.run(url, candidateOrgId || null, c.title, c.address, c.city, c.state, c.precision);
+  }
+  touchSavedSource(url, organizationId);
+  return candidates.length;
+}
+
 router.get('/scrape', (req, res) => {
-  res.render('admin/scrape', { organizations: getOrganizations(), error: null });
+  res.render('admin/scrape', { organizations: getOrganizations(), sources: getSavedSources(), error: null });
 });
 
 router.post('/scrape', async (req, res) => {
   const { url, organization_id } = req.body;
   if (!url) {
-    return res.render('admin/scrape', { organizations: getOrganizations(), error: 'URL is required.' });
+    return res.render('admin/scrape', { organizations: getOrganizations(), sources: getSavedSources(), error: 'URL is required.' });
   }
   try {
-    const candidates = await scrapeCandidates(url);
-    if (!candidates.length) {
+    const count = await runScrape(url, organization_id);
+    if (!count) {
       return res.render('admin/scrape', {
         organizations: getOrganizations(),
+        sources: getSavedSources(),
         error: 'No addresses were found on that page.',
       });
     }
-
-    // Extraction only — no geocoding here. A directory this size can easily
-    // have hundreds of entries, and geocoding all of them synchronously
-    // inside this one request would take many minutes and risk timing out.
-    // Candidates go to Scrape Review first; geocoding happens after approval,
-    // either per-candidate on confirm or in bulk via the "Geocode All
-    // Pending" background job on the Geolocation Queue page.
-    const insert = db.prepare(
-      `INSERT INTO scrape_candidates (source_url, organization_id, title, raw_address, city, state, precision)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    );
-    for (const c of candidates) {
-      const organizationId = organization_id || getOrCreateOrganizationByAbbreviation(c.organizationAbbreviation);
-      insert.run(url, organizationId || null, c.title, c.address, c.city, c.state, c.precision);
-    }
-
     res.redirect('/admin/review');
   } catch (err) {
-    res.render('admin/scrape', { organizations: getOrganizations(), error: err.message });
+    res.render('admin/scrape', { organizations: getOrganizations(), sources: getSavedSources(), error: err.message });
   }
+});
+
+// Re-runs a previously saved source by id, reusing its stored URL/organization.
+router.post('/scrape/sources/:id/run', async (req, res) => {
+  const source = db.prepare('SELECT * FROM saved_sources WHERE id = ?').get(req.params.id);
+  if (!source) return res.status(404).send('Not found');
+  try {
+    const count = await runScrape(source.url, source.organization_id);
+    if (!count) {
+      return res.render('admin/scrape', {
+        organizations: getOrganizations(),
+        sources: getSavedSources(),
+        error: `No addresses were found on ${source.url}.`,
+      });
+    }
+    res.redirect('/admin/review');
+  } catch (err) {
+    res.render('admin/scrape', { organizations: getOrganizations(), sources: getSavedSources(), error: err.message });
+  }
+});
+
+// Updates a saved source's title/note/organization — the reminder of what
+// that page contains, and which org to file its listings under next time.
+router.post('/scrape/sources/:id', (req, res) => {
+  const { title, note, organization_id } = req.body;
+  db.prepare('UPDATE saved_sources SET title = ?, note = ?, organization_id = ? WHERE id = ?').run(
+    (title || '').trim() || null,
+    (note || '').trim() || null,
+    organization_id || null,
+    req.params.id
+  );
+  res.redirect('/admin/scrape');
+});
+
+router.post('/scrape/sources/:id/delete', (req, res) => {
+  db.prepare('DELETE FROM saved_sources WHERE id = ?').run(req.params.id);
+  res.redirect('/admin/scrape');
 });
 
 // --- Stage 1: raw scrape review ---------------------------------------------
@@ -381,6 +458,59 @@ router.post('/candidates/:id/confirm', async (req, res) => {
 router.post('/candidates/:id/reject', (req, res) => {
   db.prepare("UPDATE scrape_candidates SET status = 'rejected' WHERE id = ?").run(req.params.id);
   res.redirect('/admin/candidates');
+});
+
+// --- Duplicate detection ----------------------------------------------------
+// Flags confirmed mass centers that geocode very close together or share a
+// near-identical title (see ROADMAP "Duplicate detection"), so they can be
+// compared and accepted as separate, rejected as the same place picking one
+// side, or merged field-by-field.
+
+router.get('/duplicates', (req, res) => {
+  res.render('admin/duplicates', { pairs: duplicates.findDuplicatePairs(), organizations: getOrganizations(), error: null });
+});
+
+// Not actually duplicates — stop flagging this pair.
+router.post('/duplicates/:idA/:idB/dismiss', (req, res) => {
+  duplicates.dismissPair(Number(req.params.idA), Number(req.params.idB));
+  res.redirect('/admin/duplicates');
+});
+
+// Same place — keep one record as-is and delete the other.
+router.post('/duplicates/:idA/:idB/keep/:keepId', (req, res) => {
+  const idA = Number(req.params.idA);
+  const idB = Number(req.params.idB);
+  const keepId = Number(req.params.keepId);
+  const deleteId = keepId === idA ? idB : idA;
+  db.prepare('DELETE FROM mass_centers WHERE id = ?').run(deleteId);
+  res.redirect('/admin/duplicates');
+});
+
+// Same place, but combine fields from both before deleting the loser.
+router.post('/duplicates/:idA/:idB/merge', (req, res) => {
+  const idA = Number(req.params.idA);
+  const idB = Number(req.params.idB);
+  const keepId = Number(req.body.keep_id);
+  const deleteId = keepId === idA ? idB : idA;
+  if (keepId !== idA && keepId !== idB) return res.status(400).send('Invalid merge target.');
+
+  const { title, address, organization_id, latitude, longitude } = req.body;
+  try {
+    const coords = parseManualCoords(latitude, longitude);
+    if (!coords) return res.status(400).send('Latitude/longitude are required.');
+    db.prepare(
+      `UPDATE mass_centers SET title = ?, address = ?, latitude = ?, longitude = ?, organization_id = ?, updated_at = datetime('now')
+       WHERE id = ?`
+    ).run(title.trim(), address.trim(), coords.latitude, coords.longitude, organization_id || null, keepId);
+    db.prepare('DELETE FROM mass_centers WHERE id = ?').run(deleteId);
+    res.redirect('/admin/duplicates');
+  } catch (err) {
+    res.render('admin/duplicates', {
+      pairs: duplicates.findDuplicatePairs(),
+      organizations: getOrganizations(),
+      error: err.message,
+    });
+  }
 });
 
 module.exports = router;
