@@ -1,7 +1,12 @@
-const map = L.map('map', { zoomControl: true }).setView([39.8, -98.6], 4);
+const map = L.map('map', {
+  zoomControl: true,
+  maxBounds: [[-90, -180], [90, 180]],
+  maxBoundsViscosity: 1.0,
+}).setView([39.8, -98.6], 4);
 
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
+  noWrap: true,
   attribution: '&copy; OpenStreetMap contributors',
 }).addTo(map);
 
