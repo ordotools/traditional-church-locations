@@ -320,6 +320,15 @@ a.stat:hover .n {
   bottom: 0;
 }
 
+#map-error {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  background: var(--paper);
+}
+
 /* Render map tiles in grayscale to keep the black-and-white theme. */
 .leaflet-tile-pane {
   filter: grayscale(1) contrast(1.05);

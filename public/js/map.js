@@ -10,6 +10,8 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; OpenStreetMap contributors',
 }).addTo(map);
 
+L.control.scale().addTo(map);
+
 function markerIcon(color) {
   return L.divIcon({
     className: '',
@@ -23,10 +25,15 @@ function markerIcon(color) {
 fetch('/api/pins')
   .then((res) => res.json())
   .then((pins) => {
+    const markers = [];
+
     pins.forEach((pin) => {
+      if (!Number.isFinite(pin.latitude) || !Number.isFinite(pin.longitude)) return;
+
       const marker = L.marker([pin.latitude, pin.longitude], {
         icon: markerIcon(pin.organization_color),
       }).addTo(map);
+      markers.push(marker);
 
       const orgLine = pin.organization_name
         ? `${pin.organization_name}${pin.organization_abbreviation ? ' (' + pin.organization_abbreviation + ')' : ''}`
@@ -40,6 +47,13 @@ fetch('/api/pins')
           (orgLine ? `<div class="muted">${escapeHtml(orgLine)}</div>` : '')
       );
     });
+
+    if (markers.length) {
+      map.fitBounds(L.featureGroup(markers).getBounds().pad(0.1));
+    }
+  })
+  .catch(() => {
+    document.getElementById('map-error').hidden = false;
   });
 
 function escapeHtml(str) {
