@@ -370,14 +370,6 @@ a.stat:hover .n {
   line-height: 1.7;
 }
 
-/* The one deliberate exception to the site's square, no-radius swatches:
-   this mirrors the round circleMarker used for approximate pins on the map,
-   so the legend key actually matches what's drawn. */
-.swatch--approx {
-  border-radius: 50% !important;
-  background: rgba(17, 17, 17, 0.3);
-}
-
 /* Render map tiles in grayscale to keep the black-and-white theme. */
 .leaflet-tile-pane {
   filter: grayscale(1) contrast(1.05);
@@ -435,8 +427,8 @@ a.stat:hover .n {
 
 .pin-marker {
   border: 1px solid #111;
-  width: 10px;
-  height: 10px;
+  width: var(--pin-size, 10px);
+  height: var(--pin-size, 10px);
   display: block;
 }
 
