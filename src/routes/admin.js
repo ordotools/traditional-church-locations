@@ -249,8 +249,32 @@ router.post('/candidates/geocode-all', (req, res) => {
   res.redirect('/admin/candidates');
 });
 
+// Confirms every pending candidate that's already geocoded and titled, in one
+// go. Candidates missing either are left pending for manual review.
+router.post('/candidates/confirm-all', (req, res) => {
+  const ready = db
+    .prepare("SELECT * FROM scrape_candidates WHERE status = 'pending' AND latitude IS NOT NULL AND title IS NOT NULL AND title != ''")
+    .all();
+
+  const insertMassCenter = db.prepare(
+    `INSERT INTO mass_centers (title, address, latitude, longitude, precision, organization_id, source_url)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  );
+  const markConfirmed = db.prepare("UPDATE scrape_candidates SET status = 'confirmed' WHERE id = ?");
+
+  const confirmAll = db.transaction((rows) => {
+    for (const c of rows) {
+      insertMassCenter.run(c.title.trim(), c.raw_address, c.latitude, c.longitude, c.precision, c.organization_id, c.source_url);
+      markConfirmed.run(c.id);
+    }
+  });
+  confirmAll(ready);
+
+  res.redirect('/admin/candidates');
+});
+
 router.post('/candidates/:id/confirm', async (req, res) => {
-  const { title, latitude: manualLat, longitude: manualLng } = req.body;
+  const { title, address, latitude: manualLat, longitude: manualLng } = req.body;
   const candidate = db.prepare('SELECT * FROM scrape_candidates WHERE id = ?').get(req.params.id);
   if (!candidate) return res.status(404).send('Not found');
 
@@ -258,6 +282,7 @@ router.post('/candidates/:id/confirm', async (req, res) => {
     res.render('admin/candidates', { candidates: getPendingCandidates(), error, queue: geocodeQueue.getStatus() });
 
   if (!title) return renderError('A title is required to confirm a pin.');
+  if (!address) return renderError('An address is required to confirm a pin.');
 
   let coords;
   try {
@@ -266,19 +291,26 @@ router.post('/candidates/:id/confirm', async (req, res) => {
     return renderError(err.message);
   }
 
-  if (!coords && candidate.latitude !== null) {
+  // If the address was corrected, any previously geocoded coordinates (or
+  // failure) belonged to the old text — persist the correction and re-geocode.
+  const addressChanged = address.trim() !== candidate.raw_address;
+  if (addressChanged) {
+    db.prepare('UPDATE scrape_candidates SET raw_address = ? WHERE id = ?').run(address.trim(), req.params.id);
+  }
+
+  if (!coords && !addressChanged && candidate.latitude !== null) {
     coords = { latitude: candidate.latitude, longitude: candidate.longitude };
   }
 
   if (!coords) {
-    // Not geocoded yet (bulk job hasn't reached it) — geocode now, on demand,
+    // Not geocoded yet (or address just changed) — geocode now, on demand,
     // so confirming one at a time never has to wait for the background job.
     try {
-      coords = await geocodeAddress(candidate.raw_address);
+      coords = await geocodeAddress(address.trim());
     } catch (err) {
       return renderError(err.message);
     }
-    if (!coords) return renderError('This address could not be geocoded. Enter latitude/longitude manually to confirm it.');
+    if (!coords) return renderError('This address could not be geocoded. Correct it above, or enter latitude/longitude manually.');
   }
 
   db.prepare(
@@ -286,7 +318,7 @@ router.post('/candidates/:id/confirm', async (req, res) => {
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   ).run(
     title.trim(),
-    candidate.raw_address,
+    address.trim(),
     coords.latitude,
     coords.longitude,
     candidate.precision,

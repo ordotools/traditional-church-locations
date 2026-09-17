@@ -11,14 +11,27 @@
      <% if (queue.failed) { %>, <%= queue.failed %> not found<% } %>.</p>
 <% } %>
 
+
+<%
+  var readyToConfirm = candidates.filter(function(c){ return c.latitude !== null && c.title; });
+  var ungeocoded = candidates.filter(function(c){ return c.latitude === null; });
+%>
+
 <% if (candidates.length === 0) { %>
   <p class="muted">No pending candidates. <a href="/admin/scrape">Scrape a URL</a> to find some.</p>
 <% } else { %>
-  <form method="post" action="/admin/candidates/geocode-all">
-    <button type="submit" <%= queue.running ? 'disabled' : '' %>>
-      Geocode All Pending (<%= candidates.filter(function(c){ return c.latitude === null; }).length %> ungeocoded)
-    </button>
-  </form>
+  <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+    <form method="post" action="/admin/candidates/geocode-all">
+      <button type="submit" <%= queue.running || ungeocoded.length === 0 ? 'disabled' : '' %>>
+        Geocode All Pending (<%= ungeocoded.length %> ungeocoded)
+      </button>
+    </form>
+    <% if (!queue.running && readyToConfirm.length > 0) { %>
+      <form method="post" action="/admin/candidates/confirm-all" onsubmit="return confirm('Confirm <%= readyToConfirm.length %> geocoded candidate(s) as pins?');">
+        <button type="submit">Confirm All Geolocated (<%= readyToConfirm.length %> ready)</button>
+      </form>
+    <% } %>
+  </div>
 <% } %>
 
 <% candidates.forEach(function(c) { %>
@@ -28,17 +41,20 @@
       <% if (c.organization_name) { %> · <%= c.organization_name %> (<%= c.organization_abbreviation %>)<% } %>
       · from <%= c.source_url %>
     </div>
-    <div><strong><%= c.raw_address %></strong></div>
     <div class="muted">
       <% if (c.latitude !== null) { %>
         Geocoded to <%= c.latitude.toFixed(5) %>, <%= c.longitude.toFixed(5) %>
       <% } else { %>
-        Not yet geocoded — confirming will geocode it now, or wait for the background job.
+        Not yet geocoded — confirming will try to geocode it now, or wait for the background job.
+        If it keeps failing, correct the address below and confirm again.
       <% } %>
     </div>
 
     <label for="title-<%= c.id %>">Title</label>
     <input type="text" id="title-<%= c.id %>" name="title" value="<%= c.title || '' %>" placeholder="e.g. Queen of All Saints Chapel" required>
+
+    <label for="address-<%= c.id %>">Address <span class="muted">(edit and confirm again if this couldn't be geocoded)</span></label>
+    <input type="text" id="address-<%= c.id %>" name="address" value="<%= c.raw_address %>" required>
 
     <label for="latitude-<%= c.id %>">Latitude / Longitude <span class="muted">(optional override)</span></label>
     <div style="display:flex;gap:0.5rem;">
