@@ -1,0 +1,47 @@
+<%- include('../partials/header', { title: 'Scrape Review' }) %>
+
+<% if (error) { %><div class="error"><%= error %></div><% } %>
+
+<p class="muted">
+  Raw results from a scrape, before anything is geocoded. Check the title, address, and
+  organization for obvious scraper mistakes, then approve the good ones into the
+  <a href="/admin/candidates">Geolocation Queue</a> or delete the bad ones — individually,
+  or several at once with the checkboxes below.
+</p>
+
+<% if (candidates.length === 0) { %>
+  <p class="muted">No candidates awaiting review. <a href="/admin/scrape">Scrape a URL</a> to find some.</p>
+<% } else { %>
+  <form id="bulk-review" method="post" action="/admin/review/bulk"></form>
+
+  <table>
+    <thead>
+      <tr>
+        <th><input type="checkbox" onclick="document.querySelectorAll('.review-select').forEach(function(cb){ cb.checked = this.checked; }, this)"></th>
+        <th>Title</th>
+        <th>Address</th>
+        <th>Organization</th>
+        <th>Source</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% candidates.forEach(function(c) { %>
+        <tr>
+          <td><input class="review-select" type="checkbox" form="bulk-review" name="ids" value="<%= c.id %>"></td>
+          <td><%= c.title || '(no title found)' %></td>
+          <td><%= c.raw_address %></td>
+          <td><%= c.organization_abbreviation || '' %></td>
+          <td class="muted"><a href="<%= c.source_url %>"><%= c.source_url %></a></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+
+  <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+    <button type="submit" form="bulk-review" name="action" value="approve">Approve Selected</button>
+    <button type="submit" form="bulk-review" name="action" value="delete" class="secondary"
+      onclick="return confirm('Delete the selected candidates? This cannot be undone.');">Delete Selected</button>
+  </div>
+<% } %>
+
+<%- include('../partials/footer') %>

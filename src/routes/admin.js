@@ -51,15 +51,22 @@ function getMassCenters() {
     .all();
 }
 
-function getPendingCandidates() {
+function getCandidatesByStatus(status) {
   return db
     .prepare(
       `SELECT sc.*, o.name AS organization_name, o.abbreviation AS organization_abbreviation
        FROM scrape_candidates sc LEFT JOIN organizations o ON o.id = sc.organization_id
-       WHERE sc.status = 'pending'
+       WHERE sc.status = ?
        ORDER BY sc.created_at DESC`
     )
-    .all();
+    .all(status);
+}
+
+// Normalizes the checkbox array from a bulk-action form: a single checked
+// box posts as a plain string rather than a one-item array.
+function idsFromBody(body) {
+  if (!body.ids) return [];
+  return (Array.isArray(body.ids) ? body.ids : [body.ids]).map(Number);
 }
 
 // --- Dashboard ---------------------------------------------------------
@@ -67,8 +74,9 @@ function getPendingCandidates() {
 router.get('/', (req, res) => {
   const massCenterCount = db.prepare('SELECT COUNT(*) AS n FROM mass_centers').get().n;
   const organizationCount = db.prepare('SELECT COUNT(*) AS n FROM organizations').get().n;
-  const pendingCount = db.prepare("SELECT COUNT(*) AS n FROM scrape_candidates WHERE status = 'pending'").get().n;
-  res.render('admin/dashboard', { massCenterCount, organizationCount, pendingCount });
+  const reviewCount = db.prepare("SELECT COUNT(*) AS n FROM scrape_candidates WHERE status = 'pending'").get().n;
+  const geolocationCount = db.prepare("SELECT COUNT(*) AS n FROM scrape_candidates WHERE status = 'approved'").get().n;
+  res.render('admin/dashboard', { massCenterCount, organizationCount, reviewCount, geolocationCount });
 });
 
 // --- Organizations -------------------------------------------------------
@@ -223,8 +231,9 @@ router.post('/scrape', async (req, res) => {
     // Extraction only — no geocoding here. A directory this size can easily
     // have hundreds of entries, and geocoding all of them synchronously
     // inside this one request would take many minutes and risk timing out.
-    // Geocoding happens later: per-candidate when you confirm it, or in bulk
-    // via the "Geocode All Pending" background job on the review page.
+    // Candidates go to Scrape Review first; geocoding happens after approval,
+    // either per-candidate on confirm or in bulk via the "Geocode All
+    // Pending" background job on the Geolocation Queue page.
     const insert = db.prepare(
       `INSERT INTO scrape_candidates (source_url, organization_id, title, raw_address, city, state, precision)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -234,14 +243,43 @@ router.post('/scrape', async (req, res) => {
       insert.run(url, organizationId || null, c.title, c.address, c.city, c.state, c.precision);
     }
 
-    res.redirect('/admin/candidates');
+    res.redirect('/admin/review');
   } catch (err) {
     res.render('admin/scrape', { organizations: getOrganizations(), error: err.message });
   }
 });
 
+// --- Stage 1: raw scrape review ---------------------------------------------
+// Freshly scraped candidates land here first (status 'pending'), before any
+// geocoding is attempted. A human skims titles/addresses/orgs for obvious
+// scraper mistakes (wrong org, garbled text, junk rows) and either approves
+// them into the geolocation queue below or deletes them, individually or in
+// bulk — nothing reaches the map without passing through both queues.
+
+router.get('/review', (req, res) => {
+  res.render('admin/review', { candidates: getCandidatesByStatus('pending'), error: null });
+});
+
+router.post('/review/bulk', (req, res) => {
+  const ids = idsFromBody(req.body);
+  if (ids.length) {
+    const placeholders = ids.map(() => '?').join(',');
+    const newStatus = req.body.action === 'approve' ? 'approved' : 'rejected';
+    db.prepare(`UPDATE scrape_candidates SET status = ? WHERE status = 'pending' AND id IN (${placeholders})`).run(
+      newStatus,
+      ...ids
+    );
+  }
+  res.redirect('/admin/review');
+});
+
+// --- Stage 2: geolocation queue ---------------------------------------------
+// Candidates approved above (status 'approved') get geocoded — individually
+// on confirm, or all at once via the background job — and turned into real
+// map pins once a human confirms the resulting location.
+
 router.get('/candidates', (req, res) => {
-  res.render('admin/candidates', { candidates: getPendingCandidates(), error: null, queue: geocodeQueue.getStatus() });
+  res.render('admin/candidates', { candidates: getCandidatesByStatus('approved'), error: null, queue: geocodeQueue.getStatus() });
 });
 
 router.post('/candidates/geocode-all', (req, res) => {
@@ -249,11 +287,22 @@ router.post('/candidates/geocode-all', (req, res) => {
   res.redirect('/admin/candidates');
 });
 
-// Confirms every pending candidate that's already geocoded and titled, in one
-// go. Candidates missing either are left pending for manual review.
+router.post('/candidates/bulk-delete', (req, res) => {
+  const ids = idsFromBody(req.body);
+  if (ids.length) {
+    const placeholders = ids.map(() => '?').join(',');
+    db.prepare(`UPDATE scrape_candidates SET status = 'rejected' WHERE status = 'approved' AND id IN (${placeholders})`).run(
+      ...ids
+    );
+  }
+  res.redirect('/admin/candidates');
+});
+
+// Confirms every approved candidate that's already geocoded and titled, in
+// one go. Candidates missing either are left in the queue for manual review.
 router.post('/candidates/confirm-all', (req, res) => {
   const ready = db
-    .prepare("SELECT * FROM scrape_candidates WHERE status = 'pending' AND latitude IS NOT NULL AND title IS NOT NULL AND title != ''")
+    .prepare("SELECT * FROM scrape_candidates WHERE status = 'approved' AND latitude IS NOT NULL AND title IS NOT NULL AND title != ''")
     .all();
 
   const insertMassCenter = db.prepare(
@@ -279,7 +328,7 @@ router.post('/candidates/:id/confirm', async (req, res) => {
   if (!candidate) return res.status(404).send('Not found');
 
   const renderError = (error) =>
-    res.render('admin/candidates', { candidates: getPendingCandidates(), error, queue: geocodeQueue.getStatus() });
+    res.render('admin/candidates', { candidates: getCandidatesByStatus('approved'), error, queue: geocodeQueue.getStatus() });
 
   if (!title) return renderError('A title is required to confirm a pin.');
   if (!address) return renderError('An address is required to confirm a pin.');

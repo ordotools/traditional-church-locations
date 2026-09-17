@@ -15,7 +15,7 @@ function startGeocodingAllPending() {
   if (state.running) return state;
 
   const pending = db
-    .prepare("SELECT id, raw_address FROM scrape_candidates WHERE status = 'pending' AND latitude IS NULL")
+    .prepare("SELECT id, raw_address FROM scrape_candidates WHERE status = 'approved' AND latitude IS NULL")
     .all();
   state = { running: true, total: pending.length, done: 0, failed: 0 };
 

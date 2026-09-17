@@ -10,14 +10,21 @@
     <span class="label">Organizations</span>
   </div>
   <div class="stat">
-    <span class="n"><%= pendingCount %></span>
-    <span class="label">Pending Candidates</span>
+    <span class="n"><%= reviewCount %></span>
+    <span class="label">Awaiting Scrape Review</span>
+  </div>
+  <div class="stat">
+    <span class="n"><%= geolocationCount %></span>
+    <span class="label">Awaiting Geolocation</span>
   </div>
 </div>
 
 <h2>Add a pin</h2>
 <p>Add a single address by hand from the <a href="/admin/mass-centers">Mass Centers</a> page,
-   or <a href="/admin/scrape">scrape a URL</a> to find several addresses at once and review
-   them before they're added to the map.</p>
+   or <a href="/admin/scrape">scrape a URL</a> to find several addresses at once. Scraped
+   results go through two queues before they reach the map: first
+   <a href="/admin/review">Scrape Review</a>, where you approve or delete raw scrape results,
+   then the <a href="/admin/candidates">Geolocation Queue</a>, where approved results get
+   geocoded and confirmed as pins.</p>
 
 <%- include('../partials/footer') %>

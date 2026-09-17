@@ -1,4 +1,4 @@
-<%- include('../partials/header', { title: 'Review Candidates' }) %>
+<%- include('../partials/header', { title: 'Geolocation Queue' }) %>
 
 <% if (error) { %><div class="error"><%= error %></div><% } %>
 
@@ -18,7 +18,7 @@
 %>
 
 <% if (candidates.length === 0) { %>
-  <p class="muted">No pending candidates. <a href="/admin/scrape">Scrape a URL</a> to find some.</p>
+  <p class="muted">No candidates awaiting geolocation. Approve some from <a href="/admin/review">Scrape Review</a> first.</p>
 <% } else { %>
   <div style="display:flex;gap:1rem;flex-wrap:wrap;">
     <form method="post" action="/admin/candidates/geocode-all">
@@ -31,11 +31,22 @@
         <button type="submit">Confirm All Geolocated (<%= readyToConfirm.length %> ready)</button>
       </form>
     <% } %>
+    <form id="bulk-delete" method="post" action="/admin/candidates/bulk-delete"
+      onsubmit="return confirm('Delete the selected candidates? This cannot be undone.');">
+      <label style="display:inline;font-variant:normal;font-size:inherit;color:inherit;">
+        <input type="checkbox" onclick="document.querySelectorAll('.candidate-select').forEach(function(cb){ cb.checked = this.checked; }, this)">
+        Select all
+      </label>
+      <button type="submit" class="secondary">Delete Selected</button>
+    </form>
   </div>
 <% } %>
 
 <% candidates.forEach(function(c) { %>
   <form method="post" action="/admin/candidates/<%= c.id %>/confirm">
+    <label>
+      <input class="candidate-select" type="checkbox" form="bulk-delete" name="ids" value="<%= c.id %>"> Select for bulk delete
+    </label>
     <div class="muted">
       <%= c.precision === 'exact' ? 'Address' : (c.precision === 'city' ? 'City-level (approximate)' : 'State-level (approximate)') %>
       <% if (c.organization_name) { %> · <%= c.organization_name %> (<%= c.organization_abbreviation %>)<% } %>
