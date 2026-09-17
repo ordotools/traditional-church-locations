@@ -12,14 +12,35 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 
 L.control.scale().addTo(map);
 
-function markerIcon(color) {
+function markerIcon(color, approx) {
+  const c = color || '#111';
+  const style = approx ? `border-color:${c}` : `background:${c}`;
   return L.divIcon({
     className: '',
-    html: `<span class="pin-marker" style="background:${color || '#111'}"></span>`,
+    html: `<span class="pin-marker${approx ? ' pin-marker--approx' : ''}" style="${style}"></span>`,
     iconSize: [10, 10],
     iconAnchor: [5, 5],
     popupAnchor: [0, -5],
   });
+}
+
+function renderLegend(pins) {
+  const orgs = new Map();
+  pins.forEach((pin) => {
+    if (pin.organization_name && !orgs.has(pin.organization_name)) {
+      orgs.set(pin.organization_name, pin.organization_color || '#111');
+    }
+  });
+  if (!orgs.size) return;
+
+  const legend = document.getElementById('legend');
+  let html = '';
+  orgs.forEach((color, name) => {
+    html += `<div><span class="swatch" style="background:${color}"></span>${escapeHtml(name)}</div>`;
+  });
+  html += '<div><span class="swatch swatch--approx"></span>approximate location</div>';
+  legend.innerHTML = html;
+  legend.hidden = false;
 }
 
 fetch('/api/pins')
@@ -30,16 +51,16 @@ fetch('/api/pins')
     pins.forEach((pin) => {
       if (!Number.isFinite(pin.latitude) || !Number.isFinite(pin.longitude)) return;
 
+      const approx = pin.precision && pin.precision !== 'exact';
+
       const marker = L.marker([pin.latitude, pin.longitude], {
-        icon: markerIcon(pin.organization_color),
+        icon: markerIcon(pin.organization_color, approx),
       }).addTo(map);
       markers.push(marker);
 
       const orgLine = pin.organization_name
         ? `${pin.organization_name}${pin.organization_abbreviation ? ' (' + pin.organization_abbreviation + ')' : ''}`
         : '';
-
-      const approx = pin.precision && pin.precision !== 'exact';
 
       marker.bindPopup(
         `<h3>${escapeHtml(pin.title)}</h3>` +
@@ -51,6 +72,7 @@ fetch('/api/pins')
     if (markers.length) {
       map.fitBounds(L.featureGroup(markers).getBounds().pad(0.1));
     }
+    renderLegend(pins);
   })
   .catch(() => {
     document.getElementById('map-error').hidden = false;

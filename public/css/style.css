@@ -329,6 +329,38 @@ a.stat:hover .n {
   background: var(--paper);
 }
 
+#map-title {
+  position: fixed;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  padding: 0.3rem 0.9rem;
+  font-variant: small-caps;
+  letter-spacing: 0.03em;
+  pointer-events: none;
+}
+
+#legend {
+  position: fixed;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 1000;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  line-height: 1.7;
+}
+
+.swatch--approx {
+  background: var(--paper);
+  border-width: 2px;
+  border-style: dashed;
+}
+
 /* Render map tiles in grayscale to keep the black-and-white theme. */
 .leaflet-tile-pane {
   filter: grayscale(1) contrast(1.05);
@@ -360,4 +392,10 @@ a.stat:hover .n {
   width: 10px;
   height: 10px;
   display: block;
+}
+
+.pin-marker--approx {
+  background: var(--paper);
+  border-width: 2px;
+  border-style: dashed;
 }
