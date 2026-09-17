@@ -320,7 +320,7 @@ a.stat:hover .n {
   bottom: 0;
 }
 
-#map-error {
+#map-banner {
   position: fixed;
   top: 1rem;
   left: 50%;
@@ -350,15 +350,32 @@ a.stat:hover .n {
   z-index: 1000;
   background: var(--paper);
   border: 1px solid var(--rule);
-  padding: 0.5rem 0.75rem;
+  padding: 0.4rem 0.75rem;
   font-size: 0.85rem;
+  max-width: 240px;
+}
+
+#legend summary {
+  cursor: pointer;
+  font-variant: small-caps;
+  letter-spacing: 0.03em;
+  padding: 0.15rem 0;
+}
+
+#legend[open] summary {
+  margin-bottom: 0.3rem;
+}
+
+#legend-body {
   line-height: 1.7;
 }
 
+/* The one deliberate exception to the site's square, no-radius swatches:
+   this mirrors the round circleMarker used for approximate pins on the map,
+   so the legend key actually matches what's drawn. */
 .swatch--approx {
-  background: var(--paper);
-  border-width: 2px;
-  border-style: dashed;
+  border-radius: 50% !important;
+  background: rgba(17, 17, 17, 0.3);
 }
 
 /* Render map tiles in grayscale to keep the black-and-white theme. */
@@ -375,7 +392,36 @@ a.stat:hover .n {
 
 .leaflet-popup-content {
   font-family: 'Palatino Linotype', Palatino, Georgia, 'Times New Roman', Times, serif;
+  font-size: 0.95rem;
   margin: 0.6rem 0.8rem;
+}
+
+@media (max-width: 600px) {
+  #map-title {
+    top: 0.5rem;
+    padding: 0.25rem 0.6rem;
+    font-size: 0.9rem;
+  }
+
+  #legend {
+    top: auto;
+    bottom: 2.5rem;
+    right: 0.5rem;
+    left: 0.5rem;
+    max-width: none;
+  }
+
+  .leaflet-popup-content-wrapper {
+    max-width: calc(100vw - 3rem);
+  }
+
+  /* Bring the zoom buttons up to a real touch target (~44px). */
+  .leaflet-control-zoom a {
+    width: 44px;
+    height: 44px;
+    line-height: 44px;
+    font-size: 1.3rem;
+  }
 }
 
 .leaflet-popup-content h3 {
@@ -394,8 +440,10 @@ a.stat:hover .n {
   display: block;
 }
 
-.pin-marker--approx {
-  background: var(--paper);
-  border-width: 2px;
-  border-style: dashed;
+/* markerIcon's divIcon is bigger than the visible dot, purely to grow the
+   tap target; center the dot inside that invisible box. */
+.pin-marker-hitbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }

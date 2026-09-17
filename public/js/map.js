@@ -12,50 +12,76 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 
 L.control.scale().addTo(map);
 
-function markerIcon(color, approx) {
-  const c = color || '#111';
-  const style = approx ? `border-color:${c}` : `background:${c}`;
+// The visible dot stays 10px (pin-marker), but the tappable icon is larger
+// and centers the dot inside it, so touch users get a real hit target.
+function markerIcon(color) {
   return L.divIcon({
-    className: '',
-    html: `<span class="pin-marker${approx ? ' pin-marker--approx' : ''}" style="${style}"></span>`,
-    iconSize: [10, 10],
-    iconAnchor: [5, 5],
-    popupAnchor: [0, -5],
+    className: 'pin-marker-hitbox',
+    html: `<span class="pin-marker" style="background:${color || '#111'}"></span>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -10],
   });
 }
 
-function renderLegend(pins) {
+// Approximate-precision pins get a bigger, translucent circle instead of a
+// solid dot, so "we're not sure exactly where this is" reads at a glance
+// instead of requiring a click to find out.
+function approxCircle(pin) {
+  return L.circleMarker([pin.latitude, pin.longitude], {
+    radius: 12,
+    weight: 1,
+    color: pin.organization_color || '#111',
+    fillColor: pin.organization_color || '#111',
+    fillOpacity: 0.3,
+  });
+}
+
+function renderLegend(pins, anyApprox) {
   const orgs = new Map();
   pins.forEach((pin) => {
     if (pin.organization_name && !orgs.has(pin.organization_name)) {
       orgs.set(pin.organization_name, pin.organization_color || '#111');
     }
   });
-  if (!orgs.size) return;
+  if (!orgs.size && !anyApprox) return;
 
-  const legend = document.getElementById('legend');
+  const body = document.getElementById('legend-body');
   let html = '';
   orgs.forEach((color, name) => {
     html += `<div><span class="swatch" style="background:${color}"></span>${escapeHtml(name)}</div>`;
   });
-  html += '<div><span class="swatch swatch--approx"></span>approximate location</div>';
-  legend.innerHTML = html;
-  legend.hidden = false;
+  if (anyApprox) {
+    html += '<div><span class="swatch swatch--approx"></span>approximate location</div>';
+  }
+  body.innerHTML = html;
+  document.getElementById('legend').hidden = false;
 }
+
+const banner = document.getElementById('map-banner');
+function showBanner(text) {
+  banner.textContent = text;
+  banner.hidden = false;
+}
+
+showBanner('Loading pins…');
 
 fetch('/api/pins')
   .then((res) => res.json())
   .then((pins) => {
     const markers = [];
+    let anyApprox = false;
 
     pins.forEach((pin) => {
       if (!Number.isFinite(pin.latitude) || !Number.isFinite(pin.longitude)) return;
 
       const approx = pin.precision && pin.precision !== 'exact';
+      if (approx) anyApprox = true;
 
-      const marker = L.marker([pin.latitude, pin.longitude], {
-        icon: markerIcon(pin.organization_color, approx),
-      }).addTo(map);
+      const marker = approx
+        ? approxCircle(pin)
+        : L.marker([pin.latitude, pin.longitude], { icon: markerIcon(pin.organization_color) });
+      marker.addTo(map);
       markers.push(marker);
 
       const orgLine = pin.organization_name
@@ -71,11 +97,14 @@ fetch('/api/pins')
 
     if (markers.length) {
       map.fitBounds(L.featureGroup(markers).getBounds().pad(0.1));
+      banner.hidden = true;
+    } else {
+      showBanner('No mass centers found yet.');
     }
-    renderLegend(pins);
+    renderLegend(pins, anyApprox);
   })
   .catch(() => {
-    document.getElementById('map-error').hidden = false;
+    showBanner('Could not load pins. Please try again later.');
   });
 
 function escapeHtml(str) {
