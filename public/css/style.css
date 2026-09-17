@@ -51,7 +51,7 @@ h2 {
 }
 
 .container {
-  max-width: 780px;
+  max-width: 1040px;
   margin: 0 auto;
   padding: 2rem 1.5rem 4rem;
 }
@@ -120,6 +120,95 @@ table {
   width: 100%;
   border-collapse: collapse;
   margin: 1rem 0;
+}
+
+.list-filters {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1rem 0 0;
+}
+
+.list-filters input[type="search"] {
+  flex: 1;
+}
+
+.scroll-table {
+  max-height: 60vh;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--rule);
+}
+
+.scroll-table table {
+  margin-top: 0;
+}
+
+.scroll-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--paper);
+}
+
+.two-col {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 2rem;
+}
+
+.two-col .scroll-table {
+  max-height: 60vh;
+}
+
+@media (min-width: 781px) {
+  /* Locks the viewport so the mass centers list scrolls internally instead
+     of growing the page — nav becomes a regular flex item since sticky
+     positioning isn't needed when the body itself never scrolls. */
+  body.fit-viewport {
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  body.fit-viewport nav.admin-nav {
+    position: static;
+    flex: 0 0 auto;
+  }
+
+  body.fit-viewport .container {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  body.fit-viewport .container h1 {
+    flex: 0 0 auto;
+  }
+
+  body.fit-viewport .two-col {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  body.fit-viewport .two-col > div:first-child {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+  }
+
+  body.fit-viewport .two-col .scroll-table {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+  }
+}
+
+@media (max-width: 780px) {
+  .two-col {
+    grid-template-columns: 1fr;
+  }
 }
 
 th, td {

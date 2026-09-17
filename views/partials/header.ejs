@@ -6,7 +6,7 @@
   <title><%= title %> — Admin</title>
   <link rel="stylesheet" href="/css/style.css">
 </head>
-<body>
+<body class="<%= typeof bodyClass !== 'undefined' ? bodyClass : '' %>">
   <% var isActive = function(prefix) { return prefix === '/' ? currentPath === '/' : currentPath.indexOf(prefix) === 0; }; %>
   <nav class="admin-nav">
     <a href="/admin" class="<%= isActive('/') ? 'active' : '' %>">Dashboard</a>
