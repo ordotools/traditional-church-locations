@@ -1,6 +1,6 @@
 const cheerio = require('cheerio');
 const generic = require('./scrapers/generic');
-const siteExtractors = require('./scrapers/registry');
+const siteRegistry = require('./scrapers/registry');
 
 // fetch's res.text() always decodes as UTF-8 regardless of the page's real
 // encoding. Some of these directory pages are Word exports saved as
@@ -24,7 +24,7 @@ async function scrapeCandidates(url) {
   const parsedUrl = new URL(url);
   const hostname = parsedUrl.hostname.replace(/^www\./, '');
   const pageKey = `${hostname}${parsedUrl.pathname}`.toLowerCase();
-  const extractor = siteExtractors[pageKey] || siteExtractors[hostname] || generic;
+  const extractor = siteRegistry.resolve(hostname, pageKey) || generic;
   const candidates = extractor.extract($);
 
   // De-dupe identical (title, address) pairs the page might repeat.
