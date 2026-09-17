@@ -4,8 +4,32 @@ const { geocodeAddress } = require('../geocode');
 const { scrapeCandidates } = require('../scraper');
 const geocodeQueue = require('../geocodeQueue');
 const duplicates = require('../duplicates');
+const { checkCredentials, requireAuth } = require('../auth');
 
 const router = express.Router();
+
+// --- Auth ----------------------------------------------------------------
+// Registered before the requireAuth gate below so login itself stays reachable.
+
+router.get('/login', (req, res) => {
+  if (req.session.loggedIn) return res.redirect('/admin');
+  res.render('admin/login', { error: null });
+});
+
+router.post('/login', (req, res) => {
+  const { username, password } = req.body;
+  if (!checkCredentials(username, password)) {
+    return res.render('admin/login', { error: 'Incorrect username or password.' });
+  }
+  req.session.loggedIn = true;
+  res.redirect('/admin');
+});
+
+router.post('/logout', (req, res) => {
+  req.session.destroy(() => res.redirect('/admin/login'));
+});
+
+router.use(requireAuth);
 
 // Manual lat/lng override, used when geocoding an address fails or is imprecise
 // (OpenStreetMap has gaps, especially for rural roads).

@@ -17,6 +17,9 @@
 - Admin: organization management (name, abbreviation, color), editable after
   auto-creation
 - SQLite storage, no build step
+- Single-admin login (env-var credentials, session cookie) protecting the
+  admin panel; SQLite file path configurable via `DATA_DIR` for a persistent
+  volume in production; `Dockerfile` for deploying on Coolify
 
 ## Next
 
@@ -32,8 +35,8 @@
 
 ## Later
 
-- **Multiple users** — accounts, login, and permissions for the admin panel
-  (currently unauthenticated). Roles: viewer, editor, admin.
+- **Multiple users** — accounts, per-user login, and permissions for the admin
+  panel (currently a single shared admin login). Roles: viewer, editor, admin.
 - **Discrepancy resolution** — when re-scraping finds a pin whose address or
   title differs from what's stored, surface it as a conflict to resolve
   (keep existing / take new / merge) instead of silently creating a duplicate.

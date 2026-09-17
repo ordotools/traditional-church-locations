@@ -17,14 +17,29 @@ No build step, no frontend framework.
 
 ```
 npm install
-cp .env.example .env   # set GEOCODE_CONTACT to a real contact
+cp .env.example .env   # set GEOCODE_CONTACT, ADMIN_USERNAME/PASSWORD, SESSION_SECRET
 npm start
 ```
 
 - Map: http://localhost:3000/
-- Admin panel: http://localhost:3000/admin
+- Admin panel: http://localhost:3000/admin — log in with `ADMIN_USERNAME`/`ADMIN_PASSWORD`
+  (single admin account; see ROADMAP.md for multi-user/roles).
 
-The admin panel has no authentication yet (see ROADMAP.md).
+## Deploying (Coolify)
+
+The app is a plain Node/Express server with a SQLite file on disk, built from the
+included `Dockerfile`.
+
+1. In Coolify, create a new resource from this repo — it will detect and build
+   the `Dockerfile` automatically.
+2. Add a **persistent volume** mounted at `/app/data` (the container's
+   `DATA_DIR`), so the SQLite database survives redeploys.
+3. Set environment variables: `ADMIN_USERNAME`, `ADMIN_PASSWORD`,
+   `SESSION_SECRET` (a long random string — `openssl rand -hex 32`), and
+   `GEOCODE_CONTACT`.
+4. Set the exposed port to `3000` and enable HTTPS in Coolify — the app trusts
+   the proxy's forwarded headers and requires it in production for the login
+   cookie.
 
 ## How pins get added
 

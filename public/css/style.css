@@ -73,6 +73,24 @@ nav.admin-nav a:hover {
   text-decoration: underline;
 }
 
+.logout-form {
+  display: inline;
+  margin: 0;
+  border: none;
+  padding: 0;
+}
+
+.logout-form button {
+  font-variant: small-caps;
+  background: none;
+  color: var(--ink);
+  border: none;
+  padding: 0;
+  margin: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
