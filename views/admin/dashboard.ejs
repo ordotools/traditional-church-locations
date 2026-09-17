@@ -1,22 +1,22 @@
 <%- include('../partials/header', { title: 'Dashboard' }) %>
 
 <div class="stat-row">
-  <div class="stat">
+  <a class="stat" href="/admin/mass-centers">
     <span class="n"><%= massCenterCount %></span>
     <span class="label">Mass Centers</span>
-  </div>
-  <div class="stat">
+  </a>
+  <a class="stat" href="/admin/organizations">
     <span class="n"><%= organizationCount %></span>
     <span class="label">Organizations</span>
-  </div>
-  <div class="stat">
+  </a>
+  <a class="stat" href="/admin/review">
     <span class="n"><%= reviewCount %></span>
     <span class="label">Awaiting Scrape Review</span>
-  </div>
-  <div class="stat">
+  </a>
+  <a class="stat" href="/admin/candidates">
     <span class="n"><%= geolocationCount %></span>
     <span class="label">Awaiting Geolocation</span>
-  </div>
+  </a>
 </div>
 
 <h2>Add a pin</h2>

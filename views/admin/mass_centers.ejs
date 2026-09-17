@@ -2,31 +2,6 @@
 
 <% if (error) { %><div class="error"><%= error %></div><% } %>
 
-<table>
-  <thead>
-    <tr><th>Title</th><th>Address</th><th>Organization</th><th></th></tr>
-  </thead>
-  <tbody>
-    <% massCenters.forEach(function(mc) { %>
-      <tr>
-        <td><%= mc.title %></td>
-        <td><%= mc.address %></td>
-        <td><%= mc.organization_abbreviation || '' %></td>
-        <td class="actions">
-          <a href="/admin/mass-centers/<%= mc.id %>/edit">Edit</a>
-          &nbsp;
-          <form method="post" action="/admin/mass-centers/<%= mc.id %>/delete" onsubmit="return confirm('Delete this pin?');">
-            <button type="submit" class="secondary">Delete</button>
-          </form>
-        </td>
-      </tr>
-    <% }) %>
-    <% if (massCenters.length === 0) { %>
-      <tr><td colspan="4" class="muted">No mass centers yet.</td></tr>
-    <% } %>
-  </tbody>
-</table>
-
 <h2>Add mass center</h2>
 <form method="post" action="/admin/mass-centers">
   <label for="title">Title</label>
@@ -51,5 +26,31 @@
 
   <button type="submit">Geocode &amp; Add</button>
 </form>
+
+<h2>Existing mass centers</h2>
+<table>
+  <thead>
+    <tr><th>Title</th><th>Address</th><th>Organization</th><th></th></tr>
+  </thead>
+  <tbody>
+    <% massCenters.forEach(function(mc) { %>
+      <tr>
+        <td><%= mc.title %></td>
+        <td><%= mc.address %></td>
+        <td><%= mc.organization_abbreviation || '' %></td>
+        <td class="actions">
+          <a href="/admin/mass-centers/<%= mc.id %>/edit">Edit</a>
+          &nbsp;
+          <form method="post" action="/admin/mass-centers/<%= mc.id %>/delete" onsubmit="return confirm('Delete this pin?');">
+            <button type="submit" class="secondary">Delete</button>
+          </form>
+        </td>
+      </tr>
+    <% }) %>
+    <% if (massCenters.length === 0) { %>
+      <tr><td colspan="4" class="muted">No mass centers yet.</td></tr>
+    <% } %>
+  </tbody>
+</table>
 
 <%- include('../partials/footer') %>

@@ -7,16 +7,17 @@
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
+  <% var isActive = function(prefix) { return prefix === '/' ? currentPath === '/' : currentPath.indexOf(prefix) === 0; }; %>
+  <nav class="admin-nav">
+    <a href="/admin" class="<%= isActive('/') ? 'active' : '' %>">Dashboard</a>
+    <a href="/admin/mass-centers" class="<%= isActive('/mass-centers') ? 'active' : '' %>">Mass Centers</a>
+    <a href="/admin/organizations" class="<%= isActive('/organizations') ? 'active' : '' %>">Organizations</a>
+    <a href="/admin/scrape" class="<%= isActive('/scrape') ? 'active' : '' %>">Scrape URL</a>
+    <a href="/admin/review" class="<%= isActive('/review') ? 'active' : '' %>">Scrape Review<% if (reviewCount) { %> <span class="badge"><%= reviewCount %></span><% } %></a>
+    <a href="/admin/candidates" class="<%= isActive('/candidates') ? 'active' : '' %>">Geolocation Queue<% if (geolocationCount) { %> <span class="badge"><%= geolocationCount %></span><% } %></a>
+    <a href="/admin/duplicates" class="<%= isActive('/duplicates') ? 'active' : '' %>">Duplicates</a>
+    <a href="/">View Map</a>
+    <form method="post" action="/admin/logout" class="logout-form"><button type="submit">Log out</button></form>
+  </nav>
   <div class="container">
-    <nav class="admin-nav">
-      <a href="/admin">Dashboard</a>
-      <a href="/admin/mass-centers">Mass Centers</a>
-      <a href="/admin/organizations">Organizations</a>
-      <a href="/admin/scrape">Scrape URL</a>
-      <a href="/admin/review">Scrape Review</a>
-      <a href="/admin/candidates">Geolocation Queue</a>
-      <a href="/admin/duplicates">Duplicates</a>
-      <a href="/">View Map</a>
-      <form method="post" action="/admin/logout" class="logout-form"><button type="submit">Log out</button></form>
-    </nav>
     <h1><%= title %></h1>

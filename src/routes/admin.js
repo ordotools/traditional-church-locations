@@ -31,6 +31,17 @@ router.post('/logout', (req, res) => {
 
 router.use(requireAuth);
 
+// Nav badge counts and active-link state, computed once per request so every
+// page (not just the dashboard) can show what needs attention. Duplicates is
+// left out — finding them is an O(n^2) title-similarity scan, too expensive
+// to run on every page load (see src/duplicates.js).
+router.use((req, res, next) => {
+  res.locals.currentPath = req.path;
+  res.locals.reviewCount = db.prepare("SELECT COUNT(*) AS n FROM scrape_candidates WHERE status = 'pending'").get().n;
+  res.locals.geolocationCount = db.prepare("SELECT COUNT(*) AS n FROM scrape_candidates WHERE status = 'approved'").get().n;
+  next();
+});
+
 // Manual lat/lng override, used when geocoding an address fails or is imprecise
 // (OpenStreetMap has gaps, especially for rural roads).
 function parseManualCoords(latitude, longitude) {
@@ -99,9 +110,7 @@ function idsFromBody(body) {
 router.get('/', (req, res) => {
   const massCenterCount = db.prepare('SELECT COUNT(*) AS n FROM mass_centers').get().n;
   const organizationCount = db.prepare('SELECT COUNT(*) AS n FROM organizations').get().n;
-  const reviewCount = db.prepare("SELECT COUNT(*) AS n FROM scrape_candidates WHERE status = 'pending'").get().n;
-  const geolocationCount = db.prepare("SELECT COUNT(*) AS n FROM scrape_candidates WHERE status = 'approved'").get().n;
-  res.render('admin/dashboard', { massCenterCount, organizationCount, reviewCount, geolocationCount });
+  res.render('admin/dashboard', { massCenterCount, organizationCount });
 });
 
 // --- Organizations -------------------------------------------------------

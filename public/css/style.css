@@ -57,8 +57,17 @@ h2 {
 }
 
 nav.admin-nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem 1.5rem;
+  background: var(--paper);
   border-bottom: 1px solid var(--rule);
-  padding-bottom: 0.75rem;
+  padding: 0.75rem 1.5rem;
   margin-bottom: 1.5rem;
   font-variant: small-caps;
   letter-spacing: 0.03em;
@@ -66,11 +75,27 @@ nav.admin-nav {
 
 nav.admin-nav a {
   text-decoration: none;
-  margin-right: 1.5rem;
 }
 
 nav.admin-nav a:hover {
   text-decoration: underline;
+}
+
+nav.admin-nav a.active {
+  text-decoration: underline;
+  font-weight: bold;
+}
+
+.badge {
+  display: inline-block;
+  background: var(--ink);
+  color: var(--paper);
+  font-variant: normal;
+  font-size: 0.7rem;
+  line-height: 1;
+  padding: 0.2rem 0.4rem;
+  margin-left: 0.15rem;
+  vertical-align: 0.1em;
 }
 
 .logout-form {
@@ -110,6 +135,10 @@ th {
   border-bottom: 1px solid var(--rule);
 }
 
+tbody tr:hover {
+  background: #f2f2f2;
+}
+
 form {
   margin: 1.5rem 0;
   border: 1px solid var(--rule);
@@ -127,10 +156,12 @@ label {
 input[type="text"],
 input[type="url"],
 input[type="email"],
+input[type="password"],
 select {
   width: 100%;
+  height: 2.4rem;
   font: inherit;
-  padding: 0.35rem 0.4rem;
+  padding: 0 0.4rem;
   border: 1px solid var(--rule);
   background: var(--paper);
   color: var(--ink);
@@ -139,7 +170,7 @@ select {
 
 input[type="color"] {
   width: 4rem;
-  height: 2rem;
+  height: 2.4rem;
   border: 1px solid var(--rule);
   padding: 0;
   margin-top: 0.15rem;
@@ -152,7 +183,8 @@ button, input[type="submit"] {
   background: var(--ink);
   color: var(--paper);
   border: 1px solid var(--ink);
-  padding: 0.4rem 1rem;
+  height: 2.4rem;
+  padding: 0 1rem;
   margin-top: 1rem;
   cursor: pointer;
 }
@@ -193,6 +225,14 @@ button.secondary:hover {
   margin: 1.5rem 0;
 }
 
+a.stat {
+  text-decoration: none;
+}
+
+a.stat:hover .n {
+  text-decoration: underline;
+}
+
 .stat-row .stat .n {
   font-size: 2rem;
   display: block;
@@ -216,6 +256,58 @@ button.secondary:hover {
 
 .muted {
   color: var(--muted);
+}
+
+.card {
+  border: 1px solid #ccc;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.candidate-card {
+  border: 1px solid var(--rule);
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+}
+
+.candidate-card form {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.candidate-card .candidate-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.dup-columns {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
+.dup-column {
+  flex: 1;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+}
+
+.dup-column form {
+  margin: auto 0 0;
+}
+
+.dup-column form button,
+.dismiss-form button {
+  width: 100%;
+  margin-top: 0;
+}
+
+.dismiss-form {
+  margin-top: 0.75rem;
 }
 
 /* --- Public map page --- */

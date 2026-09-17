@@ -43,7 +43,7 @@
 <% } %>
 
 <% candidates.forEach(function(c) { %>
-  <form method="post" action="/admin/candidates/<%= c.id %>/confirm">
+  <div class="candidate-card">
     <label>
       <input class="candidate-select" type="checkbox" form="bulk-delete" name="ids" value="<%= c.id %>"> Select for bulk delete
     </label>
@@ -61,23 +61,25 @@
       <% } %>
     </div>
 
-    <label for="title-<%= c.id %>">Title</label>
-    <input type="text" id="title-<%= c.id %>" name="title" value="<%= c.title || '' %>" placeholder="e.g. Queen of All Saints Chapel" required>
+    <form method="post" action="/admin/candidates/<%= c.id %>/confirm">
+      <label for="title-<%= c.id %>">Title</label>
+      <input type="text" id="title-<%= c.id %>" name="title" value="<%= c.title || '' %>" placeholder="e.g. Queen of All Saints Chapel" required>
 
-    <label for="address-<%= c.id %>">Address <span class="muted">(edit and confirm again if this couldn't be geocoded)</span></label>
-    <input type="text" id="address-<%= c.id %>" name="address" value="<%= c.raw_address %>" required>
+      <label for="address-<%= c.id %>">Address <span class="muted">(edit and confirm again if this couldn't be geocoded)</span></label>
+      <input type="text" id="address-<%= c.id %>" name="address" value="<%= c.raw_address %>" required>
 
-    <label for="latitude-<%= c.id %>">Latitude / Longitude <span class="muted">(optional override)</span></label>
-    <div style="display:flex;gap:0.5rem;">
-      <input type="text" id="latitude-<%= c.id %>" name="latitude" placeholder="Latitude">
-      <input type="text" id="longitude-<%= c.id %>" name="longitude" placeholder="Longitude">
-    </div>
+      <label for="latitude-<%= c.id %>">Latitude / Longitude <span class="muted">(optional override)</span></label>
+      <div style="display:flex;gap:0.5rem;">
+        <input type="text" id="latitude-<%= c.id %>" name="latitude" placeholder="Latitude">
+        <input type="text" id="longitude-<%= c.id %>" name="longitude" placeholder="Longitude">
+      </div>
 
-    <button type="submit">Confirm</button>
-  </form>
-  <form method="post" action="/admin/candidates/<%= c.id %>/reject" style="border:none;padding:0;margin:-1rem 0 1.5rem;">
-    <button type="submit" class="secondary">Reject</button>
-  </form>
+      <div class="candidate-actions">
+        <button type="submit">Confirm</button>
+        <button type="submit" formaction="/admin/candidates/<%= c.id %>/reject" formnovalidate class="secondary">Reject</button>
+      </div>
+    </form>
+  </div>
 <% }) %>
 
 <%- include('../partials/footer') %>

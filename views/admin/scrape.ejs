@@ -31,7 +31,7 @@
      what each page contains, then scrape it again with one click instead of tracking the site down again.</p>
 
   <% sources.forEach(function(s) { %>
-    <div style="border:1px solid #ccc;border-radius:6px;padding:1rem;margin-bottom:1rem;">
+    <div class="card">
       <div><a href="<%= s.url %>" target="_blank" rel="noopener"><%= s.url %></a></div>
       <div class="muted">
         <%= s.last_scraped_at ? 'Last scraped ' + s.last_scraped_at : 'Never scraped' %>
