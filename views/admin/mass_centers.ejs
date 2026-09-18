@@ -16,7 +16,8 @@
     </div>
     <% if (massCenters.length > 0) { %>
       <form id="bulk-delete" method="post" action="/admin/mass-centers/bulk-delete"
-        onsubmit="return confirm('Delete the selected mass centers? This cannot be undone.');"></form>
+        hx-post="/admin/mass-centers/bulk-delete" hx-select="#mc-rows" hx-target="#mc-rows" hx-swap="outerHTML"
+        hx-confirm="Delete the selected mass centers? This cannot be undone."></form>
     <% } %>
     <div class="scroll-table">
       <table>
@@ -36,7 +37,9 @@
               <td class="actions">
                 <a href="/admin/mass-centers/<%= mc.id %>/edit">Edit</a>
                 &nbsp;
-                <form method="post" action="/admin/mass-centers/<%= mc.id %>/delete" onsubmit="return confirm('Delete this pin?');">
+                <form method="post" action="/admin/mass-centers/<%= mc.id %>/delete"
+                  hx-post="/admin/mass-centers/<%= mc.id %>/delete" hx-select="#mc-rows" hx-target="#mc-rows" hx-swap="outerHTML"
+                  hx-confirm="Delete this pin?">
                   <button type="submit" class="secondary">Delete</button>
                 </form>
               </td>
@@ -85,12 +88,11 @@
   (function () {
     var search = document.getElementById('mc-search');
     var orgFilter = document.getElementById('mc-org-filter');
-    var rows = document.querySelectorAll('#mc-rows tr[data-search]');
 
     function applyFilters() {
       var q = search.value.trim().toLowerCase();
       var org = orgFilter.value;
-      rows.forEach(function (row) {
+      document.querySelectorAll('#mc-rows tr[data-search]').forEach(function (row) {
         var matchesSearch = !q || row.dataset.search.indexOf(q) !== -1;
         var matchesOrg = !org || row.dataset.org === org;
         row.style.display = matchesSearch && matchesOrg ? '' : 'none';
@@ -99,6 +101,11 @@
 
     search.addEventListener('input', applyFilters);
     orgFilter.addEventListener('change', applyFilters);
+    // #mc-rows is swapped wholesale by htmx after a delete — the server
+    // response is unfiltered, so re-apply the current search/org filter.
+    document.body.addEventListener('htmx:afterSwap', function (e) {
+      if (e.detail.target.id === 'mc-rows') applyFilters();
+    });
 
     var selectAll = document.getElementById('mc-select-all');
     if (selectAll) {

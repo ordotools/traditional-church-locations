@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title><%= title %> — Admin</title>
   <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/htmx/2.0.4/htmx.min.js"></script>
 </head>
-<body class="<%= typeof bodyClass !== 'undefined' ? bodyClass : '' %>">
+<body class="<%= typeof bodyClass !== 'undefined' ? bodyClass : '' %>" hx-boost="true">
   <% var isActive = function(prefix) { return prefix === '/' ? currentPath === '/' : currentPath.indexOf(prefix) === 0; }; %>
   <nav class="admin-nav">
     <a href="/admin" class="<%= isActive('/') ? 'active' : '' %>">Dashboard</a>

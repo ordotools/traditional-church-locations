@@ -25,7 +25,7 @@
           <div class="muted"><%= c.organization_name || '—' %></div>
           <div class="muted"><%= c.latitude.toFixed(5) %>, <%= c.longitude.toFixed(5) %></div>
           <form method="post" action="/admin/duplicates/<%= p.a.id %>/<%= p.b.id %>/keep/<%= c.id %>"
-            onsubmit="return confirm('Keep this record and delete the other one?');">
+            hx-confirm="Keep this record and delete the other one?">
             <button type="submit">Keep this one, delete the other</button>
           </form>
         </div>

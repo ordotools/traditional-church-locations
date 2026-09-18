@@ -60,7 +60,7 @@
         <form method="post" action="/admin/scrape/sources/<%= s.id %>/run">
           <button type="submit">Scrape Again</button>
         </form>
-        <form method="post" action="/admin/scrape/sources/<%= s.id %>/delete" onsubmit="return confirm('Remove this saved URL from the list?');">
+        <form method="post" action="/admin/scrape/sources/<%= s.id %>/delete" hx-confirm="Remove this saved URL from the list?">
           <button type="submit" class="secondary">Remove</button>
         </form>
       </div>

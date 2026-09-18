@@ -41,7 +41,7 @@
   <div style="display:flex;gap:1rem;flex-wrap:wrap;">
     <button type="submit" form="bulk-review" name="action" value="approve">Approve Selected</button>
     <button type="submit" form="bulk-review" name="action" value="delete" class="secondary"
-      onclick="return confirm('Delete the selected candidates? This cannot be undone.');">Delete Selected</button>
+      hx-confirm="Delete the selected candidates? This cannot be undone.">Delete Selected</button>
   </div>
 <% } %>
 

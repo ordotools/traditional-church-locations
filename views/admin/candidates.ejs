@@ -2,14 +2,16 @@
 
 <% if (error) { %><div class="error"><%= error %></div><% } %>
 
-<% if (queue.running) { %>
-  <meta http-equiv="refresh" content="4">
-  <p>Geocoding in the background: <%= queue.done %> / <%= queue.total %> done
-     <% if (queue.failed) { %>(<%= queue.failed %> not found)<% } %> — this page refreshes itself.</p>
-<% } else if (queue.total) { %>
-  <p class="muted">Last background geocoding run: <%= queue.done %> / <%= queue.total %> processed
-     <% if (queue.failed) { %>, <%= queue.failed %> not found<% } %>.</p>
-<% } %>
+<div id="queue-status"
+  <% if (queue.running) { %>hx-get="/admin/candidates" hx-select="#queue-status" hx-target="this" hx-swap="outerHTML" hx-trigger="every 4s"<% } %>>
+  <% if (queue.running) { %>
+    <p>Geocoding in the background: <%= queue.done %> / <%= queue.total %> done
+       <% if (queue.failed) { %>(<%= queue.failed %> not found)<% } %> — this updates itself.</p>
+  <% } else if (queue.total) { %>
+    <p class="muted">Last background geocoding run: <%= queue.done %> / <%= queue.total %> processed
+       <% if (queue.failed) { %>, <%= queue.failed %> not found<% } %>.</p>
+  <% } %>
+</div>
 
 
 <%
@@ -27,12 +29,12 @@
       </button>
     </form>
     <% if (!queue.running && readyToConfirm.length > 0) { %>
-      <form method="post" action="/admin/candidates/confirm-all" onsubmit="return confirm('Confirm <%= readyToConfirm.length %> geocoded candidate(s) as pins?');">
+      <form method="post" action="/admin/candidates/confirm-all" hx-confirm="Confirm <%= readyToConfirm.length %> geocoded candidate(s) as pins?">
         <button type="submit">Confirm All Geolocated (<%= readyToConfirm.length %> ready)</button>
       </form>
     <% } %>
     <form id="bulk-delete" method="post" action="/admin/candidates/bulk-delete"
-      onsubmit="return confirm('Delete the selected candidates? This cannot be undone.');">
+      hx-confirm="Delete the selected candidates? This cannot be undone.">
       <label style="display:inline;font-variant:normal;font-size:inherit;color:inherit;">
         <input type="checkbox" onclick="document.querySelectorAll('.candidate-select').forEach(function(cb){ cb.checked = this.checked; }, this)">
         Select all
