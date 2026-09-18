@@ -20,11 +20,16 @@
 </div>
 
 <h2>Add a pin</h2>
-<p>Add a single address by hand from the <a href="/admin/mass-centers">Mass Centers</a> page,
-   or <a href="/admin/scrape">scrape a URL</a> to find several addresses at once. Scraped
-   results go through two queues before they reach the map: first
-   <a href="/admin/review">Scrape Review</a>, where you approve or delete raw scrape results,
-   then the <a href="/admin/candidates">Geolocation Queue</a>, where approved results get
-   geocoded and confirmed as pins.</p>
+<div class="dash-actions">
+  <a class="btn-primary" href="/admin/scrape">Scrape a URL</a>
+  <a class="btn-secondary" href="/admin/mass-centers">Add one by hand</a>
+</div>
+
+<h2>How a scrape becomes a pin</h2>
+<ol class="pipeline">
+  <li><a href="/admin/scrape">Scrape</a> a directory page for addresses.</li>
+  <li><a href="/admin/review">Review</a> the raw results, and approve the good ones.</li>
+  <li><a href="/admin/candidates">Geocode and confirm</a> each one — it becomes a pin on the map.</li>
+</ol>
 
 <%- include('../partials/footer') %>

@@ -1,16 +1,28 @@
-/* Tufte-inspired: serif typography, black on white, hairline rules,
-   no border-radius anywhere, no hover transitions or animations. */
-
 :root {
+  /* Public map palette — untouched by the admin redesign below. */
   --ink: #111;
   --paper: #fff;
   --rule: #111;
   --muted: #555;
+
+  /* Admin palette. Accent is a "rubric red" — the color liturgical rubrics
+     are traditionally printed in — used once, deliberately, for primary
+     actions and status; everything else stays quiet neutrals. */
+  --admin-bg: #f5f6f8;
+  --admin-surface: #fff;
+  --admin-ink: #1b1f27;
+  --admin-muted: #667085;
+  --admin-border: #e2e5ea;
+  --admin-border-strong: #cdd2db;
+  --admin-accent: #9c2b28;
+  --admin-accent-hover: #7e221f;
+  --admin-accent-soft: #f7e9e8;
+  --admin-radius: 7px;
+  --admin-shadow: 0 1px 2px rgba(20, 20, 25, 0.06);
 }
 
 * {
   box-sizing: border-box;
-  border-radius: 0 !important;
 }
 
 html, body {
@@ -56,9 +68,47 @@ h2 {
   padding: 1.5rem 1.5rem 3rem;
 }
 
+/* ==========================================================================
+   Admin — everything below is scoped to body.admin (set by the admin
+   header/login partials) so the public map page above is unaffected: system
+   sans instead of serif (no font download, and it reads as software rather
+   than a document), a single red accent, and real corners/shadows instead
+   of the Tufte hairline-only look.
+   ========================================================================== */
+
+body.admin {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  background: var(--admin-bg);
+  color: var(--admin-ink);
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+body.admin a {
+  color: var(--admin-ink);
+}
+
+body.admin a:hover {
+  color: var(--admin-accent);
+}
+
+body.admin h1 {
+  font-size: 1.4rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+body.admin h2 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-top: 2rem;
+}
+
 /* Wider column for pages dominated by a table or side-by-side cards, where
    the 1040px default leaves addresses/URLs wrapping unnecessarily. */
-body.wide .container {
+body.admin.wide .container {
   max-width: 1400px;
 }
 
@@ -68,37 +118,65 @@ nav.admin-nav {
   z-index: 10;
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   align-items: center;
-  gap: 0.5rem 1.5rem;
-  background: var(--paper);
-  border-bottom: 1px solid var(--rule);
-  padding: 0.75rem 1.5rem;
+  gap: 0.2rem 0.4rem;
+  background: var(--admin-surface);
+  border-bottom: 1px solid var(--admin-border);
+  box-shadow: var(--admin-shadow);
+  padding: 0.6rem 1.25rem;
   margin-bottom: 1.5rem;
-  font-variant: small-caps;
-  letter-spacing: 0.03em;
+}
+
+nav.admin-nav .brand {
+  font-weight: 700;
+  margin-right: 1rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+nav.admin-nav .brand:hover {
+  color: var(--admin-ink);
+}
+
+nav.admin-nav .nav-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem;
+  flex: 1 1 auto;
 }
 
 nav.admin-nav a {
   text-decoration: none;
+  color: var(--admin-muted);
+  padding: 0.4rem 0.65rem;
+  border-radius: var(--admin-radius);
+  font-weight: 500;
 }
 
 nav.admin-nav a:hover {
-  text-decoration: underline;
+  color: var(--admin-ink);
+  background: var(--admin-bg);
 }
 
 nav.admin-nav a.active {
-  text-decoration: underline;
-  font-weight: bold;
+  color: var(--admin-accent);
+  background: var(--admin-accent-soft);
+  font-weight: 600;
+}
+
+nav.admin-nav .view-map {
+  margin-left: auto;
+  color: var(--admin-muted);
 }
 
 .badge {
   display: inline-block;
-  background: var(--ink);
-  color: var(--paper);
-  font-variant: normal;
-  font-size: 0.7rem;
+  background: var(--admin-accent);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 600;
   line-height: 1;
+  border-radius: 999px;
   padding: 0.2rem 0.4rem;
   margin-left: 0.15rem;
   vertical-align: 0.1em;
@@ -106,26 +184,31 @@ nav.admin-nav a.active {
 
 .logout-form {
   display: inline;
-  margin: 0;
+  margin: 0 0 0 0.5rem;
   border: none;
   padding: 0;
 }
 
-.logout-form button {
-  font-variant: small-caps;
+body.admin .logout-form button {
+  font-weight: 500;
   background: none;
-  color: var(--ink);
+  color: var(--admin-muted);
   border: none;
   padding: 0;
   margin: 0;
-  text-decoration: underline;
+  height: auto;
   cursor: pointer;
 }
 
-table {
+body.admin .logout-form button:hover {
+  color: var(--admin-accent);
+}
+
+body.admin table {
   width: 100%;
   border-collapse: collapse;
   margin: 1rem 0;
+  font-size: 0.92rem;
 }
 
 .list-filters {
@@ -138,10 +221,20 @@ table {
   flex: 1;
 }
 
+/* Without this, the select's width:100% (from the shared rule below) makes
+   it claim the whole row as its flex-basis, leaving nothing for the search
+   box above to grow into. */
+body.admin .list-filters select {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 190px;
+}
+
 .scroll-table {
   max-height: 60vh;
   overflow-y: auto;
-  border-bottom: 1px solid var(--rule);
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
 }
 
 .scroll-table table {
@@ -151,7 +244,7 @@ table {
 .scroll-table thead th {
   position: sticky;
   top: 0;
-  background: var(--paper);
+  background: var(--admin-surface);
 }
 
 .two-col {
@@ -168,19 +261,19 @@ table {
   /* Locks the viewport so the mass centers list scrolls internally instead
      of growing the page — nav becomes a regular flex item since sticky
      positioning isn't needed when the body itself never scrolls. */
-  body.fit-viewport {
+  body.admin.fit-viewport {
     height: 100vh;
     overflow: hidden;
     display: flex;
     flex-direction: column;
   }
 
-  body.fit-viewport nav.admin-nav {
+  body.admin.fit-viewport nav.admin-nav {
     position: static;
     flex: 0 0 auto;
   }
 
-  body.fit-viewport .container {
+  body.admin.fit-viewport .container {
     flex: 1 1 auto;
     min-height: 0;
     display: flex;
@@ -188,23 +281,23 @@ table {
     overflow: hidden;
   }
 
-  body.fit-viewport .container h1 {
+  body.admin.fit-viewport .container h1 {
     flex: 0 0 auto;
   }
 
-  body.fit-viewport .two-col {
+  body.admin.fit-viewport .two-col {
     flex: 1 1 auto;
     min-height: 0;
   }
 
-  body.fit-viewport .two-col > div:first-child {
+  body.admin.fit-viewport .two-col > div:first-child {
     display: flex;
     flex-direction: column;
     min-height: 0;
     height: 100%;
   }
 
-  body.fit-viewport .two-col .scroll-table {
+  body.admin.fit-viewport .two-col .scroll-table {
     flex: 1 1 auto;
     min-height: 0;
     max-height: none;
@@ -217,35 +310,46 @@ table {
   }
 }
 
-th, td {
+body.admin th, body.admin td {
   text-align: left;
-  padding: 0.4rem 0.6rem 0.4rem 0;
-  border-bottom: 1px solid #ccc;
+  padding: 0.55rem 0.75rem 0.55rem 0;
+  border-bottom: 1px solid var(--admin-border);
   vertical-align: top;
 }
 
-th {
-  font-weight: 400;
-  font-variant: small-caps;
-  border-bottom: 1px solid var(--rule);
+body.admin th {
+  font-weight: 600;
+  font-size: 0.78rem;
+  color: var(--admin-muted);
+  border-bottom: 1px solid var(--admin-border-strong);
 }
 
-tbody tr:hover {
-  background: #f2f2f2;
+body.admin tbody tr:hover {
+  background: var(--admin-bg);
 }
 
-form {
+body.admin form {
   margin: 1rem 0;
-  border: 1px solid var(--rule);
-  padding: 0.85rem 1.1rem;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  padding: 1rem 1.1rem;
+  background: var(--admin-surface);
 }
 
-label {
+/* #bulk-delete / #bulk-review hold no fields of their own — checkboxes
+   elsewhere on the page target them via form="id" — so they'd otherwise
+   render as an empty bordered card. */
+body.admin form:empty {
+  display: none;
+}
+
+body.admin label {
   display: block;
-  font-variant: small-caps;
-  font-size: 0.85rem;
-  color: var(--muted);
-  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--admin-muted);
+  margin-top: 0.7rem;
+  margin-bottom: 0.2rem;
 }
 
 /* Puts a form's fields side by side instead of stacked, for forms that
@@ -263,124 +367,215 @@ label {
   }
 }
 
-input[type="text"],
-input[type="url"],
-input[type="email"],
-input[type="password"],
-select {
+body.admin input[type="text"],
+body.admin input[type="url"],
+body.admin input[type="email"],
+body.admin input[type="password"],
+body.admin input[type="search"],
+body.admin select {
   width: 100%;
-  height: 2.4rem;
+  height: 2.3rem;
   font: inherit;
-  padding: 0 0.4rem;
-  border: 1px solid var(--rule);
-  background: var(--paper);
-  color: var(--ink);
+  padding: 0 0.6rem;
+  border: 1px solid var(--admin-border-strong);
+  border-radius: 6px;
+  background: var(--admin-surface);
+  color: var(--admin-ink);
   margin-top: 0.15rem;
 }
 
-input[type="color"] {
+body.admin input:focus,
+body.admin select:focus {
+  outline: 2px solid var(--admin-accent);
+  outline-offset: 1px;
+  border-color: var(--admin-accent);
+}
+
+body.admin input[type="color"] {
   width: 4rem;
-  height: 2.4rem;
-  border: 1px solid var(--rule);
-  padding: 0;
+  height: 2.3rem;
+  border: 1px solid var(--admin-border-strong);
+  border-radius: 6px;
+  padding: 0.2rem;
   margin-top: 0.15rem;
-  background: var(--paper);
+  background: var(--admin-surface);
 }
 
-button, input[type="submit"] {
+body.admin button, body.admin input[type="submit"] {
   font: inherit;
-  font-variant: small-caps;
-  background: var(--ink);
-  color: var(--paper);
-  border: 1px solid var(--ink);
-  height: 2.4rem;
-  padding: 0 1rem;
+  font-weight: 600;
+  background: var(--admin-accent);
+  color: #fff;
+  border: 1px solid var(--admin-accent);
+  border-radius: 6px;
+  height: 2.3rem;
+  padding: 0 1.1rem;
   margin-top: 1rem;
   cursor: pointer;
 }
 
-button:hover, input[type="submit"]:hover {
-  background: var(--ink);
-  color: var(--paper);
+body.admin button:hover, body.admin input[type="submit"]:hover {
+  background: var(--admin-accent-hover);
+  border-color: var(--admin-accent-hover);
 }
 
-button.secondary, .link-button {
-  background: var(--paper);
-  color: var(--ink);
+body.admin button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-button.secondary:hover {
-  background: var(--paper);
-  color: var(--ink);
+body.admin button.secondary, body.admin .link-button {
+  background: var(--admin-surface);
+  color: var(--admin-ink);
+  border: 1px solid var(--admin-border-strong);
 }
 
-.error, .notice {
-  border: 1px solid var(--ink);
-  padding: 0.6rem 0.8rem;
+body.admin button.secondary:hover {
+  background: var(--admin-accent-soft);
+  color: var(--admin-accent);
+  border-color: var(--admin-accent);
+}
+
+body.admin .error, body.admin .notice {
+  border: 1px solid var(--admin-border-strong);
+  border-radius: 6px;
+  padding: 0.65rem 0.9rem;
   margin: 1rem 0;
+  background: var(--admin-bg);
+}
+
+body.admin .error {
+  border-color: var(--admin-accent);
+  background: var(--admin-accent-soft);
+  color: var(--admin-accent-hover);
 }
 
 .swatch {
   display: inline-block;
   width: 0.9em;
   height: 0.9em;
-  border: 1px solid var(--ink);
+  border-radius: 3px;
+  border: 1px solid var(--admin-border-strong);
   vertical-align: middle;
   margin-right: 0.35em;
 }
 
 .stat-row {
   display: flex;
-  gap: 3rem;
-  margin: 1.5rem 0;
+  gap: 1rem;
+  margin: 1.25rem 0;
+  flex-wrap: wrap;
 }
 
 a.stat {
+  flex: 1 1 160px;
   text-decoration: none;
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border);
+  border-top: 3px solid var(--admin-border-strong);
+  border-radius: var(--admin-radius);
+  box-shadow: var(--admin-shadow);
+  padding: 1rem 1.1rem;
 }
 
-a.stat:hover .n {
-  text-decoration: underline;
+a.stat:hover {
+  border-top-color: var(--admin-accent);
 }
 
 .stat-row .stat .n {
-  font-size: 2rem;
+  font-size: 1.9rem;
+  font-weight: 700;
   display: block;
 }
 
 .stat-row .stat .label {
-  font-variant: small-caps;
-  color: var(--muted);
+  color: var(--admin-muted);
+  font-size: 0.85rem;
 }
 
-.actions form {
+.dash-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin: 0.75rem 0 1.5rem;
+  flex-wrap: wrap;
+}
+
+.btn-primary, .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  height: 2.3rem;
+  padding: 0 1.1rem;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.btn-primary {
+  background: var(--admin-accent);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: var(--admin-accent-hover);
+  color: #fff;
+}
+
+.btn-secondary {
+  background: var(--admin-surface);
+  border: 1px solid var(--admin-border-strong);
+  color: var(--admin-ink);
+}
+
+.btn-secondary:hover {
+  border-color: var(--admin-accent);
+  color: var(--admin-accent);
+}
+
+.pipeline {
+  margin: 0.75rem 0 0;
+  padding-left: 1.3rem;
+}
+
+.pipeline li {
+  margin: 0.4rem 0;
+}
+
+body.admin .actions form {
   display: inline-block;
   border: none;
   padding: 0;
   margin: 0;
 }
 
-.actions button {
+body.admin .actions button {
   margin-top: 0;
+  height: 2rem;
+  padding: 0 0.75rem;
+  font-size: 0.85rem;
 }
 
 .muted {
-  color: var(--muted);
+  color: var(--admin-muted);
 }
 
 .card {
-  border: 1px solid #ccc;
-  padding: 0.85rem 1rem;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  padding: 0.9rem 1.1rem;
   margin-bottom: 1rem;
+  background: var(--admin-surface);
 }
 
 .candidate-card {
-  border: 1px solid var(--rule);
-  padding: 0.75rem 1rem;
-  margin: 0.75rem 0;
+  border: 1px solid var(--admin-border);
+  border-radius: var(--admin-radius);
+  padding: 0.85rem 1.1rem;
+  margin: 0.85rem 0;
+  background: var(--admin-surface);
 }
 
-.candidate-card form {
+body.admin .candidate-card form {
   border: none;
   padding: 0;
   margin: 0;
@@ -409,20 +604,39 @@ a.stat:hover .n {
   min-width: 220px;
   display: flex;
   flex-direction: column;
+  background: var(--admin-bg);
+  border: 1px solid var(--admin-border);
+  border-radius: 6px;
+  padding: 0.8rem 0.9rem;
 }
 
-.dup-column form {
+body.admin .dup-column form {
   margin: auto 0 0;
+  border: none;
+  padding: 0;
+  background: none;
 }
 
 .dup-column form button,
 .dismiss-form button {
   width: 100%;
-  margin-top: 0;
+  margin-top: 0.75rem;
 }
 
 .dismiss-form {
   margin-top: 0.75rem;
+}
+
+body.admin.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+body.admin.login-page .container {
+  max-width: 340px;
+  width: 100%;
 }
 
 /* --- Public map page --- */

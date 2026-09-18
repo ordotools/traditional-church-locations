@@ -6,9 +6,9 @@
   <title>Log in — Admin</title>
   <link rel="stylesheet" href="/css/style.css">
 </head>
-<body>
+<body class="admin login-page">
   <div class="container">
-    <h1>Log in</h1>
+    <h1>Church Locations Admin</h1>
     <% if (error) { %><p class="error"><%= error %></p><% } %>
     <form method="post" action="/admin/login">
       <label>Username <input type="text" name="username" autocomplete="username" required autofocus></label>
