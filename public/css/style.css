@@ -47,13 +47,19 @@ h1 {
 
 h2 {
   font-size: 1.2rem;
-  margin-top: 2rem;
+  margin-top: 1.5rem;
 }
 
 .container {
   max-width: 1040px;
   margin: 0 auto;
-  padding: 2rem 1.5rem 4rem;
+  padding: 1.5rem 1.5rem 3rem;
+}
+
+/* Wider column for pages dominated by a table or side-by-side cards, where
+   the 1040px default leaves addresses/URLs wrapping unnecessarily. */
+body.wide .container {
+  max-width: 1400px;
 }
 
 nav.admin-nav {
@@ -229,9 +235,9 @@ tbody tr:hover {
 }
 
 form {
-  margin: 1.5rem 0;
+  margin: 1rem 0;
   border: 1px solid var(--rule);
-  padding: 1rem 1.25rem;
+  padding: 0.85rem 1.1rem;
 }
 
 label {
@@ -239,7 +245,22 @@ label {
   font-variant: small-caps;
   font-size: 0.85rem;
   color: var(--muted);
-  margin-top: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+/* Puts a form's fields side by side instead of stacked, for forms that
+   repeat many times on one page (e.g. the geolocation queue) where
+   stacked labels waste a lot of vertical space. */
+.field-grid {
+  display: grid;
+  grid-template-columns: 2fr 2fr 1fr 1fr;
+  gap: 0 0.75rem;
+}
+
+@media (max-width: 700px) {
+  .field-grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 input[type="text"],
@@ -349,20 +370,25 @@ a.stat:hover .n {
 
 .card {
   border: 1px solid #ccc;
-  padding: 1rem;
-  margin-bottom: 1.5rem;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1rem;
 }
 
 .candidate-card {
   border: 1px solid var(--rule);
-  padding: 1rem 1.25rem;
-  margin: 1.5rem 0;
+  padding: 0.75rem 1rem;
+  margin: 0.75rem 0;
 }
 
 .candidate-card form {
   border: none;
   padding: 0;
   margin: 0;
+}
+
+.candidate-meta input[type="checkbox"] {
+  vertical-align: middle;
+  margin-right: 0.35em;
 }
 
 .candidate-card .candidate-actions {
@@ -515,10 +541,39 @@ a.stat:hover .n {
 }
 
 .pin-marker {
+  position: relative;
   border: 1px solid #111;
   width: var(--pin-size, 10px);
   height: var(--pin-size, 10px);
   display: block;
+  /* --glow-blur/--glow-opacity (map.js) stay 0 while zoomed out and ramp
+     up near max zoom, so a cluster of pins doesn't fuzz together. */
+  box-shadow: 0 0 var(--glow-blur, 0px) calc(var(--glow-blur, 0px) * 0.25) currentColor;
+}
+
+.pin-marker::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: inherit;
+  animation: pin-pulse 1.8s ease-out infinite;
+}
+
+@keyframes pin-pulse {
+  0% {
+    transform: scale(1);
+    opacity: calc(var(--glow-opacity, 0) * 0.6);
+  }
+  100% {
+    transform: scale(3);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pin-marker::after {
+    animation: none;
+  }
 }
 
 /* markerIcon's divIcon is bigger than the visible dot, purely to grow the

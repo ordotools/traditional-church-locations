@@ -1,4 +1,4 @@
-<%- include('../partials/header', { title: 'Geolocation Queue' }) %>
+<%- include('../partials/header', { title: 'Geolocation Queue', bodyClass: 'wide' }) %>
 
 <% if (error) { %><div class="error"><%= error %></div><% } %>
 
@@ -44,45 +44,47 @@
   </div>
 <% } %>
 
+<%
+  var precisionLabels = {
+    exact: 'Address',
+    postal: 'Postal code-level (approximate)',
+    city: 'City-level (approximate)',
+    state: 'State-level (approximate)',
+    country: 'Country-level (approximate)',
+  };
+%>
 <% candidates.forEach(function(c) { %>
   <div class="candidate-card">
-    <label>
-      <input class="candidate-select" type="checkbox" form="bulk-delete" name="ids" value="<%= c.id %>"> Select for bulk delete
-    </label>
-    <div class="muted">
-      <%
-        var precisionLabels = {
-          exact: 'Address',
-          postal: 'Postal code-level (approximate)',
-          city: 'City-level (approximate)',
-          state: 'State-level (approximate)',
-          country: 'Country-level (approximate)',
-        };
-      %>
+    <div class="muted candidate-meta">
+      <input class="candidate-select" type="checkbox" form="bulk-delete" name="ids" value="<%= c.id %>" aria-label="Select for bulk delete">
       <%= precisionLabels[c.precision] || c.precision %>
       <% if (c.organization_name) { %> · <%= c.organization_name %> (<%= c.organization_abbreviation %>)<% } %>
-      · from <%= c.source_url %>
-    </div>
-    <div class="muted">
+      · from <a class="muted" href="<%= c.source_url %>"><%= c.source_url %></a>
       <% if (c.latitude !== null) { %>
-        Geocoded to <%= c.latitude.toFixed(5) %>, <%= c.longitude.toFixed(5) %>
+        · geocoded to <%= c.latitude.toFixed(5) %>, <%= c.longitude.toFixed(5) %>
       <% } else { %>
-        Not yet geocoded — confirming will try to geocode it now, or wait for the background job.
-        If it keeps failing, correct the address below and confirm again.
+        · not yet geocoded — correct the address below and confirm to retry
       <% } %>
     </div>
 
     <form method="post" action="/admin/candidates/<%= c.id %>/confirm">
-      <label for="title-<%= c.id %>">Title</label>
-      <input type="text" id="title-<%= c.id %>" name="title" value="<%= c.title || '' %>" placeholder="e.g. Queen of All Saints Chapel" required>
-
-      <label for="address-<%= c.id %>">Address <span class="muted">(edit and confirm again if this couldn't be geocoded)</span></label>
-      <input type="text" id="address-<%= c.id %>" name="address" value="<%= c.raw_address %>" required>
-
-      <label for="latitude-<%= c.id %>">Latitude / Longitude <span class="muted">(optional override)</span></label>
-      <div style="display:flex;gap:0.5rem;">
-        <input type="text" id="latitude-<%= c.id %>" name="latitude" placeholder="Latitude">
-        <input type="text" id="longitude-<%= c.id %>" name="longitude" placeholder="Longitude">
+      <div class="field-grid">
+        <div>
+          <label for="title-<%= c.id %>">Title</label>
+          <input type="text" id="title-<%= c.id %>" name="title" value="<%= c.title || '' %>" placeholder="e.g. Queen of All Saints Chapel" required>
+        </div>
+        <div>
+          <label for="address-<%= c.id %>">Address</label>
+          <input type="text" id="address-<%= c.id %>" name="address" value="<%= c.raw_address %>" required>
+        </div>
+        <div>
+          <label for="latitude-<%= c.id %>">Latitude</label>
+          <input type="text" id="latitude-<%= c.id %>" name="latitude" placeholder="optional override">
+        </div>
+        <div>
+          <label for="longitude-<%= c.id %>">Longitude</label>
+          <input type="text" id="longitude-<%= c.id %>" name="longitude" placeholder="optional override">
+        </div>
       </div>
 
       <div class="candidate-actions">

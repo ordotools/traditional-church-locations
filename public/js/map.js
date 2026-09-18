@@ -4,10 +4,10 @@ const map = L.map('map', {
   maxBoundsViscosity: 1.0,
 }).setView([39.8, -98.6], 4);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+L.tileLayer('https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_3pqi_1_0820b5f5c90fefaa38ad004b', {
   maxZoom: 19,
   noWrap: true,
-  attribution: '&copy; OpenStreetMap contributors',
+  attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
 }).addTo(map);
 
 L.control.scale().addTo(map);
@@ -18,8 +18,23 @@ function sizeForZoom(zoom) {
   const z = Math.max(4, Math.min(zoom, 16));
   return Math.round(6 + ((z - 4) * (14 - 6)) / (16 - 4));
 }
+// No glow while zoomed out (a whole cluster of pins would just fuzz
+// together); it eases in slowly, then grows large near max zoom so
+// individual pin positions stay easy to pick out.
+const GLOW_START_ZOOM = 8;
+const GLOW_MAX_ZOOM = 18;
+const GLOW_MAX_BLUR = 20;
+function glowForZoom(zoom) {
+  if (zoom <= GLOW_START_ZOOM) return 0;
+  const t = Math.min(1, (zoom - GLOW_START_ZOOM) / (GLOW_MAX_ZOOM - GLOW_START_ZOOM));
+  return Math.round(t * t * GLOW_MAX_BLUR);
+}
 function updatePinSize() {
-  document.documentElement.style.setProperty('--pin-size', `${sizeForZoom(map.getZoom())}px`);
+  const zoom = map.getZoom();
+  document.documentElement.style.setProperty('--pin-size', `${sizeForZoom(zoom)}px`);
+  const blur = glowForZoom(zoom);
+  document.documentElement.style.setProperty('--glow-blur', `${blur}px`);
+  document.documentElement.style.setProperty('--glow-opacity', (blur / GLOW_MAX_BLUR).toFixed(2));
 }
 map.on('zoomend', updatePinSize);
 updatePinSize();
@@ -30,7 +45,7 @@ updatePinSize();
 function markerIcon(color) {
   return L.divIcon({
     className: 'pin-marker-hitbox',
-    html: `<span class="pin-marker" style="background:${color || '#111'}"></span>`,
+    html: `<span class="pin-marker" style="background:${color || '#111'};color:${color || '#111'}"></span>`,
     iconSize: [30, 30],
     iconAnchor: [15, 15],
     popupAnchor: [0, -10],

@@ -32,30 +32,13 @@
 
   <% sources.forEach(function(s) { %>
     <div class="card">
-      <div><a href="<%= s.url %>" target="_blank" rel="noopener"><%= s.url %></a></div>
+      <% if (s.title) { %><strong><%= s.title %></strong><br><% } %>
+      <a href="<%= s.url %>" target="_blank" rel="noopener"><%= s.url %></a>
       <div class="muted">
         <%= s.last_scraped_at ? 'Last scraped ' + s.last_scraped_at : 'Never scraped' %>
+        <% if (s.note) { %> · <%= s.note %><% } %>
       </div>
 
-      <form method="post" action="/admin/scrape/sources/<%= s.id %>">
-        <label for="title-<%= s.id %>">Title</label>
-        <input type="text" id="title-<%= s.id %>" name="title" value="<%= s.title || '' %>" placeholder="e.g. SSPX chapel directory">
-
-        <label for="note-<%= s.id %>">Note</label>
-        <input type="text" id="note-<%= s.id %>" name="note" value="<%= s.note || '' %>" placeholder="e.g. table layout, one row per chapel, no city/state fallback needed">
-
-        <label for="organization_id-<%= s.id %>">Organization <span class="muted">(optional default for future scrapes)</span></label>
-        <select id="organization_id-<%= s.id %>" name="organization_id">
-          <option value="">Detect automatically per listing</option>
-          <% organizations.forEach(function(org) { %>
-            <option value="<%= org.id %>" <%= String(org.id) === String(s.organization_id) ? 'selected' : '' %>>
-              <%= org.name %> (<%= org.abbreviation %>)
-            </option>
-          <% }) %>
-        </select>
-
-        <button type="submit" class="secondary">Save</button>
-      </form>
       <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
         <form method="post" action="/admin/scrape/sources/<%= s.id %>/run">
           <button type="submit">Scrape Again</button>
@@ -64,6 +47,29 @@
           <button type="submit" class="secondary">Remove</button>
         </form>
       </div>
+
+      <details style="margin-top:0.5rem;">
+        <summary>Edit title, note, or default organization</summary>
+        <form method="post" action="/admin/scrape/sources/<%= s.id %>">
+          <label for="title-<%= s.id %>">Title</label>
+          <input type="text" id="title-<%= s.id %>" name="title" value="<%= s.title || '' %>" placeholder="e.g. SSPX chapel directory">
+
+          <label for="note-<%= s.id %>">Note</label>
+          <input type="text" id="note-<%= s.id %>" name="note" value="<%= s.note || '' %>" placeholder="e.g. table layout, one row per chapel, no city/state fallback needed">
+
+          <label for="organization_id-<%= s.id %>">Organization <span class="muted">(optional default for future scrapes)</span></label>
+          <select id="organization_id-<%= s.id %>" name="organization_id">
+            <option value="">Detect automatically per listing</option>
+            <% organizations.forEach(function(org) { %>
+              <option value="<%= org.id %>" <%= String(org.id) === String(s.organization_id) ? 'selected' : '' %>>
+                <%= org.name %> (<%= org.abbreviation %>)
+              </option>
+            <% }) %>
+          </select>
+
+          <button type="submit" class="secondary">Save</button>
+        </form>
+      </details>
     </div>
   <% }) %>
 <% } %>
