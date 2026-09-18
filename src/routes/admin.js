@@ -251,6 +251,15 @@ router.post('/mass-centers/:id/delete', (req, res) => {
   res.redirect('/admin/mass-centers');
 });
 
+router.post('/mass-centers/bulk-delete', (req, res) => {
+  const ids = idsFromBody(req.body);
+  if (ids.length) {
+    const placeholders = ids.map(() => '?').join(',');
+    db.prepare(`DELETE FROM mass_centers WHERE id IN (${placeholders})`).run(...ids);
+  }
+  res.redirect('/admin/mass-centers');
+});
+
 // --- Scraping --------------------------------------------------------------
 
 function getSavedSources() {
