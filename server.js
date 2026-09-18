@@ -1,5 +1,6 @@
 const path = require('path');
 const express = require('express');
+const compression = require('compression');
 const session = require('express-session');
 
 const apiRoutes = require('./src/routes/api');
@@ -15,8 +16,9 @@ app.set('trust proxy', 1);
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
+app.use(compression());
 app.use(express.urlencoded({ extended: false }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1d' }));
 
 // ponytail: MemoryStore — sessions reset on restart/redeploy (everyone gets
 // logged out) and don't share across multiple instances. Fine for a single

@@ -556,6 +556,11 @@ a.stat:hover .n {
   position: absolute;
   inset: 0;
   background: inherit;
+}
+
+/* .glow-active (map.js) is only set once --glow-blur > 0, so the pulse
+   isn't animating (invisibly) on every pin while zoomed out. */
+:root.glow-active .pin-marker::after {
   animation: pin-pulse 1.8s ease-out infinite;
 }
 
@@ -571,7 +576,7 @@ a.stat:hover .n {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pin-marker::after {
+  :root.glow-active .pin-marker::after {
     animation: none;
   }
 }

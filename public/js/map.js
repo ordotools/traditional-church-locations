@@ -35,6 +35,9 @@ function updatePinSize() {
   const blur = glowForZoom(zoom);
   document.documentElement.style.setProperty('--glow-blur', `${blur}px`);
   document.documentElement.style.setProperty('--glow-opacity', (blur / GLOW_MAX_BLUR).toFixed(2));
+  // Only run the pulse animation once it's actually visible — otherwise
+  // every pin animates invisibly while zoomed out for no reason.
+  document.documentElement.classList.toggle('glow-active', blur > 0);
 }
 map.on('zoomend', updatePinSize);
 updatePinSize();
