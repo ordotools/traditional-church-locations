@@ -1,9 +1,10 @@
 const express = require('express');
 const db = require('../db');
 const { geocodeAddress, geocodeCascade } = require('../geocode');
-const { scrapeCandidates } = require('../scraper');
 const geocodeQueue = require('../geocodeQueue');
 const duplicates = require('../duplicates');
+const candidatePipeline = require('../candidatePipeline');
+const scrapeScheduler = require('../scrapeScheduler');
 const { checkCredentials, requireAuth } = require('../auth');
 
 const router = express.Router();
@@ -31,15 +32,21 @@ router.post('/logout', (req, res) => {
 
 router.use(requireAuth);
 
-// Nav badge counts and active-link state, computed once per request so every
-// page (not just the dashboard) can show what needs attention. Duplicates is
-// left out — finding them is an O(n^2) title-similarity scan, too expensive
-// to run on every page load (see src/duplicates.js).
+// Nav badge counts, active-link state, and the scrape-status footer bar —
+// computed once per request so every page (not just Scrape URL) can show
+// what needs attention and whether a scheduled scrape is running. Duplicates
+// is left out of the badges — finding them is an O(n^2) title-similarity
+// scan, too expensive to run on every page load (see src/duplicates.js).
 router.use((req, res, next) => {
   res.locals.currentPath = req.path;
+  // req.path is relative to this router's mount point (e.g. '/mass-centers')
+  // — fine for the nav's isActive() string match above, but the status bar
+  // below needs a real fetchable URL, hence the '/admin' prefix restored here.
+  res.locals.currentFullPath = req.baseUrl + req.path;
   res.locals.reviewCount = db.prepare("SELECT COUNT(*) AS n FROM scrape_candidates WHERE status = 'pending'").get().n;
   res.locals.geolocationCount = db.prepare("SELECT COUNT(*) AS n FROM scrape_candidates WHERE status = 'approved'").get().n;
   res.locals.conflictCount = db.prepare("SELECT COUNT(*) AS n FROM scrape_candidates WHERE status = 'conflict'").get().n;
+  res.locals.scrapeStatus = scrapeScheduler.getStatus();
   next();
 });
 
@@ -55,27 +62,8 @@ function parseManualCoords(latitude, longitude) {
   return { latitude: lat, longitude: lng };
 }
 
-// A rotating palette so auto-created organizations get visually distinct
-// colors rather than all defaulting to black.
-const AUTO_COLORS = ['#a6192e', '#00594c', '#1d3557', '#7b3f00', '#4a154b', '#2a6f2b', '#8c1c13', '#003554'];
-
 function getOrganizations() {
   return db.prepare('SELECT * FROM organizations ORDER BY name').all();
-}
-
-// Looks up an organization by abbreviation (case-insensitive); auto-creates
-// one if it doesn't exist yet, so scraping doesn't stall on unknown codes.
-// The name starts out the same as the abbreviation — rename it on the
-// Organizations page once you know what it stands for.
-function getOrCreateOrganizationByAbbreviation(abbreviation) {
-  if (!abbreviation) return null;
-  const existing = db.prepare('SELECT * FROM organizations WHERE abbreviation = ? COLLATE NOCASE').get(abbreviation);
-  if (existing) return existing.id;
-  const color = AUTO_COLORS[db.prepare('SELECT COUNT(*) AS n FROM organizations').get().n % AUTO_COLORS.length];
-  const info = db
-    .prepare('INSERT INTO organizations (name, abbreviation, color) VALUES (?, ?, ?)')
-    .run(abbreviation, abbreviation, color);
-  return info.lastInsertRowid;
 }
 
 function getMassCenters() {
@@ -273,54 +261,25 @@ function getSavedSources() {
     .all();
 }
 
-// Records/updates the "previously scraped URLs" list so a source can be
-// re-run later without having to re-find the site. Title/note are left alone
-// here — they're filled in by hand afterward as a reminder of what's there.
-function touchSavedSource(url, organizationId) {
-  db.prepare(
-    `INSERT INTO saved_sources (url, organization_id, last_scraped_at) VALUES (?, ?, datetime('now'))
-     ON CONFLICT(url) DO UPDATE SET
-       organization_id = COALESCE(excluded.organization_id, organization_id),
-       last_scraped_at = excluded.last_scraped_at`
-  ).run(url, organizationId || null);
-}
-
-// Fetches a URL, extracts candidates, and inserts them for Scrape Review.
-// Extraction only — no geocoding here. A directory this size can easily
-// have hundreds of entries, and geocoding all of them synchronously inside
-// this one request would take many minutes and risk timing out. Candidates
-// go to Scrape Review first; geocoding happens after approval, either
-// per-candidate on confirm or in bulk via the "Geocode All Pending" job.
-// Throws if the fetch fails; returns { count, aiWarning } (count 0 = none
-// found; aiWarning set when AI was configured but ended up unused for this
-// page — see scraper.js).
-async function runScrape(url, organizationId) {
-  const { candidates, aiWarning } = await scrapeCandidates(url);
-  if (!candidates.length) return { count: 0, aiWarning };
-
-  const insert = db.prepare(
-    `INSERT INTO scrape_candidates (source_url, organization_id, title, raw_address, city, state, country, postal_code, precision)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  );
-  for (const c of candidates) {
-    const candidateOrgId = organizationId || getOrCreateOrganizationByAbbreviation(c.organizationAbbreviation);
-    insert.run(url, candidateOrgId || null, c.title, c.address, c.city, c.state, c.country || null, c.postalCode || null, c.precision);
-  }
-  touchSavedSource(url, organizationId);
-  return { count: candidates.length, aiWarning };
-}
-
 router.get('/scrape', (req, res) => {
-  res.render('admin/scrape', { organizations: getOrganizations(), sources: getSavedSources(), error: null });
+  res.render('admin/scrape', {
+    organizations: getOrganizations(),
+    sources: getSavedSources(),
+    error: null,
+  });
 });
 
 router.post('/scrape', async (req, res) => {
   const { url, organization_id } = req.body;
   if (!url) {
-    return res.render('admin/scrape', { organizations: getOrganizations(), sources: getSavedSources(), error: 'URL is required.' });
+    return res.render('admin/scrape', {
+      organizations: getOrganizations(),
+      sources: getSavedSources(),
+      error: 'URL is required.',
+    });
   }
   try {
-    const { count, aiWarning } = await runScrape(url, organization_id);
+    const { count, aiWarning } = await candidatePipeline.runScrape(url, organization_id);
     if (!count) {
       return res.render('admin/scrape', {
         organizations: getOrganizations(),
@@ -330,7 +289,11 @@ router.post('/scrape', async (req, res) => {
     }
     res.redirect(`/admin/review${aiWarning ? `?ai_warning=${encodeURIComponent(aiWarning)}` : ''}`);
   } catch (err) {
-    res.render('admin/scrape', { organizations: getOrganizations(), sources: getSavedSources(), error: err.message });
+    res.render('admin/scrape', {
+      organizations: getOrganizations(),
+      sources: getSavedSources(),
+      error: err.message,
+    });
   }
 });
 
@@ -339,7 +302,7 @@ router.post('/scrape/sources/:id/run', async (req, res) => {
   const source = db.prepare('SELECT * FROM saved_sources WHERE id = ?').get(req.params.id);
   if (!source) return res.status(404).send('Not found');
   try {
-    const { count, aiWarning } = await runScrape(source.url, source.organization_id);
+    const { count, aiWarning } = await candidatePipeline.runScrape(source.url, source.organization_id);
     if (!count) {
       return res.render('admin/scrape', {
         organizations: getOrganizations(),
@@ -349,8 +312,27 @@ router.post('/scrape/sources/:id/run', async (req, res) => {
     }
     res.redirect(`/admin/review${aiWarning ? `?ai_warning=${encodeURIComponent(aiWarning)}` : ''}`);
   } catch (err) {
-    res.render('admin/scrape', { organizations: getOrganizations(), sources: getSavedSources(), error: err.message });
+    res.render('admin/scrape', {
+      organizations: getOrganizations(),
+      sources: getSavedSources(),
+      error: err.message,
+    });
   }
+});
+
+// --- Automatic re-scraping -------------------------------------------------
+// User-defined schedule that re-runs every saved source unattended (see
+// src/scrapeScheduler.js), dedupes against what's already known, geocodes
+// what's new, and auto-resolves it the same way "Confirm All" does.
+
+router.post('/scrape/schedule', (req, res) => {
+  scrapeScheduler.updateSchedule({ enabled: req.body.enabled === 'on', intervalHours: req.body.interval_hours });
+  res.redirect('/admin/scrape');
+});
+
+router.post('/scrape/schedule/run', (req, res) => {
+  scrapeScheduler.triggerRun();
+  res.redirect('/admin/scrape');
 });
 
 // Updates a saved source's title/note/organization — the reminder of what
@@ -420,77 +402,11 @@ router.post('/candidates/bulk-delete', (req, res) => {
   res.redirect('/admin/candidates');
 });
 
-// Re-scraping found this same listing again — touch the existing pin's
-// source/timestamp, and upgrade its address/coordinates if this scrape came
-// back more precise than what's stored (see duplicates.js precision ladder).
-// This is what lets daily re-scraping of up to ~1000 locations run without a
-// human: same organization at the same address is never a new pin.
-function refreshMassCenterFromCandidate(mc, candidate) {
-  const useNew = duplicates.isMorePrecise(candidate.precision, mc.precision);
-  const merged = {
-    address: useNew ? candidate.raw_address : mc.address,
-    latitude: useNew ? candidate.latitude : mc.latitude,
-    longitude: useNew ? candidate.longitude : mc.longitude,
-    precision: useNew ? candidate.precision : mc.precision,
-  };
-  db.prepare(
-    `UPDATE mass_centers SET address = ?, latitude = ?, longitude = ?, precision = ?,
-       source_url = COALESCE(?, source_url), updated_at = datetime('now')
-     WHERE id = ?`
-  ).run(merged.address, merged.latitude, merged.longitude, merged.precision, candidate.source_url || null, mc.id);
-  Object.assign(mc, merged);
-  return mc;
-}
-
 // Confirms every approved candidate that's already geocoded and titled, in
-// one go. Candidates missing either are left in the queue for manual review.
-// Each one is checked against existing pins first (see duplicates.js): a
-// same-organization match refreshes that pin instead of creating a new one,
-// a different-organization match is held as a conflict for /admin/conflicts,
-// and only a genuinely new location becomes a new pin.
-router.post('/candidates/confirm-all', (req, res) => {
-  const ready = db
-    .prepare("SELECT * FROM scrape_candidates WHERE status = 'approved' AND latitude IS NOT NULL AND title IS NOT NULL AND title != ''")
-    .all();
-
-  const insertMassCenter = db.prepare(
-    `INSERT INTO mass_centers (title, address, latitude, longitude, precision, organization_id, source_url)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  );
-  const markConfirmed = db.prepare("UPDATE scrape_candidates SET status = 'confirmed' WHERE id = ?");
-  const markConflict = db.prepare("UPDATE scrape_candidates SET status = 'conflict', conflict_mass_center_id = ? WHERE id = ?");
-
-  const confirmAll = db.transaction((rows) => {
-    // Fetched once and kept in sync locally (rather than re-queried per row)
-    // so two candidates in the same batch that duplicate each other, or a
-    // freshly-inserted pin later in the batch, are still caught.
-    const centers = db.prepare('SELECT * FROM mass_centers').all();
-    for (const c of rows) {
-      const match = duplicates.findMassCenterMatch(c, centers);
-      if (match && !match.sameOrg) {
-        markConflict.run(match.massCenter.id, c.id);
-        continue;
-      }
-      if (match) {
-        refreshMassCenterFromCandidate(match.massCenter, c);
-        markConfirmed.run(c.id);
-        continue;
-      }
-      const info = insertMassCenter.run(c.title.trim(), c.raw_address, c.latitude, c.longitude, c.precision, c.organization_id, c.source_url);
-      centers.push({
-        id: info.lastInsertRowid,
-        title: c.title,
-        address: c.raw_address,
-        latitude: c.latitude,
-        longitude: c.longitude,
-        organization_id: c.organization_id,
-        precision: c.precision,
-      });
-      markConfirmed.run(c.id);
-    }
-  });
-  confirmAll(ready);
-
+// one go (see candidatePipeline.resolveReadyCandidates — same logic the
+// scheduler uses for an unattended run).
+router.post('/candidates/confirm-all', async (req, res) => {
+  await candidatePipeline.resolveReadyCandidates();
   res.redirect('/admin/candidates');
 });
 
@@ -563,7 +479,7 @@ router.post('/candidates/:id/confirm', async (req, res) => {
     return res.redirect('/admin/candidates');
   }
   if (match) {
-    refreshMassCenterFromCandidate(match.massCenter, resolved);
+    candidatePipeline.refreshMassCenterFromCandidate(match.massCenter, resolved);
   } else {
     db.prepare(
       `INSERT INTO mass_centers (title, address, latitude, longitude, precision, organization_id, source_url)

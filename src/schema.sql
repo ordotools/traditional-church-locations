@@ -62,3 +62,15 @@ CREATE TABLE IF NOT EXISTS scrape_candidates (
   conflict_mass_center_id INTEGER REFERENCES mass_centers(id) ON DELETE SET NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Single-row settings for the automatic re-scrape job (src/scrapeScheduler.js).
+-- last_run_summary is a small JSON blob for display on the Scrape URL page.
+CREATE TABLE IF NOT EXISTS scrape_schedule (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  interval_hours INTEGER NOT NULL DEFAULT 24,
+  enabled INTEGER NOT NULL DEFAULT 0,
+  last_run_at TEXT,
+  last_run_summary TEXT,
+  run_count INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO scrape_schedule (id) VALUES (1);

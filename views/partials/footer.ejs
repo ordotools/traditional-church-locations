@@ -1,3 +1,15 @@
   </div>
+
+  <div id="scrape-status-bar" class="scrape-status-bar"
+    <% if (scrapeStatus.running) { %>hx-get="<%= currentFullPath %>" hx-select="#scrape-status-bar" hx-target="this" hx-swap="outerHTML" hx-trigger="every 4s"<% } %>>
+    <% if (scrapeStatus.running) { %>
+      <span class="scrape-spinner" aria-hidden="true"></span>
+      Automatic web scrape running<% if (scrapeStatus.phase === 'scraping' && scrapeStatus.sourcesTotal) { %> — <%= scrapeStatus.sourcesDone %>/<%= scrapeStatus.sourcesTotal %> sources<% } else if (scrapeStatus.phase === 'geocoding') { %> — geocoding<% } else if (scrapeStatus.phase === 'resolving') { %> — resolving<% } %>
+    <% } else { %>
+      Automatic scraping: <%= scrapeStatus.enabled ? ('every ' + scrapeStatus.interval_hours + 'h') : 'disabled' %>
+      · <%= scrapeStatus.run_count %> run<%= scrapeStatus.run_count === 1 ? '' : 's' %> completed
+      <% if (scrapeStatus.last_run_at) { %>· last <%= scrapeStatus.last_run_at %><% } %>
+    <% } %>
+  </div>
 </body>
 </html>

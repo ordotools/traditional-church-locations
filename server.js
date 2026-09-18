@@ -5,6 +5,7 @@ const session = require('express-session');
 
 const apiRoutes = require('./src/routes/api');
 const adminRoutes = require('./src/routes/admin');
+const scrapeScheduler = require('./src/scrapeScheduler');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -38,3 +39,5 @@ app.use('/admin', adminRoutes);
 app.listen(PORT, () => {
   console.log(`traditional-church-locations running at http://localhost:${PORT}`);
 });
+
+scrapeScheduler.start();

@@ -112,6 +112,48 @@ body.admin.wide .container {
   max-width: 1400px;
 }
 
+/* Room for the fixed scrape-status-bar below so it never covers the last
+   bit of page content. */
+body.admin .container {
+  padding-bottom: 3.5rem;
+}
+
+/* Always-visible thin strip reporting the automatic re-scrape job's state
+   (see src/scrapeScheduler.js) — self-polls via htmx while a run is in
+   progress, see footer.ejs. */
+.scrape-status-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2rem;
+  padding: 0 1.25rem;
+  font-size: 0.78rem;
+  color: var(--admin-muted);
+  background: var(--admin-surface);
+  border-top: 1px solid var(--admin-border);
+}
+
+.scrape-spinner {
+  display: inline-block;
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 2px solid var(--admin-accent);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: admin-spin 0.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scrape-spinner {
+    animation: none;
+  }
+}
+
 nav.admin-nav {
   position: sticky;
   top: 0;

@@ -25,6 +25,44 @@
   <button type="submit">Scrape</button>
 </form>
 
+<h2>Automatic Re-scraping</h2>
+<p class="muted">
+  On the interval below, every saved URL is re-scraped unattended. Listings that already match an existing
+  pin (same organization, same address) are skipped as duplicates. New or changed listings are geocoded and
+  auto-resolved: a pin under a different organization at the same address goes to the
+  <a href="/admin/conflicts">Conflicts</a> queue for review, everything else publishes automatically.
+</p>
+
+<form method="post" action="/admin/scrape/schedule">
+  <label><input type="checkbox" name="enabled" <%= scrapeStatus.enabled ? 'checked' : '' %>> Enabled</label>
+
+  <label for="interval_hours">Every</label>
+  <input type="number" id="interval_hours" name="interval_hours" min="1" value="<%= scrapeStatus.interval_hours %>" style="width:5rem;display:inline-block;"> hours
+
+  <button type="submit">Save</button>
+</form>
+
+<p class="muted">
+  <% if (scrapeStatus.running) { %>
+    Running now<% if (scrapeStatus.phase === 'scraping' && scrapeStatus.sourcesTotal) { %>
+      — <%= scrapeStatus.sourcesDone %>/<%= scrapeStatus.sourcesTotal %> sources scraped<% } else if (scrapeStatus.phase === 'geocoding') { %> — geocoding new candidates<% } else if (scrapeStatus.phase === 'resolving') { %> — resolving matches<% } %>…
+  <% } else if (scrapeStatus.last_run_at) { %>
+    Last run <%= scrapeStatus.last_run_at %> (<%= scrapeStatus.run_count %> run<%= scrapeStatus.run_count === 1 ? '' : 's' %> total)
+    <% const summary = scrapeStatus.last_run_summary ? JSON.parse(scrapeStatus.last_run_summary) : null; %>
+    <% if (summary) { %>
+      — <%= summary.newCandidates %> new, <%= summary.skippedDuplicates %> skipped as duplicates,
+      <%= summary.confirmed %> auto-confirmed, <%= summary.newPins %> new pins,
+      <%= summary.conflicts %> sent to conflicts<% if (summary.sourcesFailed) { %>, <%= summary.sourcesFailed %> source(s) failed<% } %>.
+    <% } %>
+  <% } else { %>
+    Never run yet.
+  <% } %>
+</p>
+
+<form method="post" action="/admin/scrape/schedule/run">
+  <button type="submit" class="secondary" <%= scrapeStatus.running ? 'disabled' : '' %>>Run Now</button>
+</form>
+
 <% if (sources.length) { %>
   <h2>Previously Scraped URLs</h2>
   <p class="muted">Recorded automatically each time you scrape a URL. Add a title and note as a reminder of

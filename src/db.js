@@ -25,6 +25,7 @@ const MIGRATIONS = [
   ['scrape_candidates', 'postal_code', 'TEXT'],
   ['scrape_candidates', 'precision', "TEXT NOT NULL DEFAULT 'exact'"],
   ['scrape_candidates', 'conflict_mass_center_id', 'INTEGER REFERENCES mass_centers(id) ON DELETE SET NULL'],
+  ['scrape_schedule', 'run_count', 'INTEGER NOT NULL DEFAULT 0'],
 ];
 for (const [table, column, definition] of MIGRATIONS) {
   const existing = db.prepare(`PRAGMA table_info(${table})`).all();
