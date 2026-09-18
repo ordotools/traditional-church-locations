@@ -206,6 +206,15 @@ router.get('/mass-centers/:id/edit', (req, res) => {
   res.render('admin/mass_center_edit', { massCenter, organizations: getOrganizations(), error: null, notice });
 });
 
+router.post('/mass-centers/bulk-delete', (req, res) => {
+  const ids = idsFromBody(req.body);
+  if (ids.length) {
+    const placeholders = ids.map(() => '?').join(',');
+    db.prepare(`DELETE FROM mass_centers WHERE id IN (${placeholders})`).run(...ids);
+  }
+  res.redirect('/admin/mass-centers');
+});
+
 router.post('/mass-centers/:id', async (req, res) => {
   const { title, address, organization_id, latitude: manualLat, longitude: manualLng } = req.body;
   const existing = db.prepare('SELECT * FROM mass_centers WHERE id = ?').get(req.params.id);
@@ -248,15 +257,6 @@ router.post('/mass-centers/:id', async (req, res) => {
 
 router.post('/mass-centers/:id/delete', (req, res) => {
   db.prepare('DELETE FROM mass_centers WHERE id = ?').run(req.params.id);
-  res.redirect('/admin/mass-centers');
-});
-
-router.post('/mass-centers/bulk-delete', (req, res) => {
-  const ids = idsFromBody(req.body);
-  if (ids.length) {
-    const placeholders = ids.map(() => '?').join(',');
-    db.prepare(`DELETE FROM mass_centers WHERE id IN (${placeholders})`).run(...ids);
-  }
   res.redirect('/admin/mass-centers');
 });
 
