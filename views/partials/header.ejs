@@ -18,6 +18,7 @@
       <a href="/admin/scrape" class="<%= isActive('/scrape') ? 'active' : '' %>">Scrape URL</a>
       <a href="/admin/review" class="<%= isActive('/review') ? 'active' : '' %>">Scrape Review<% if (reviewCount) { %> <span class="badge"><%= reviewCount %></span><% } %></a>
       <a href="/admin/candidates" class="<%= isActive('/candidates') ? 'active' : '' %>">Geolocation Queue<% if (geolocationCount) { %> <span class="badge"><%= geolocationCount %></span><% } %></a>
+      <a href="/admin/conflicts" class="<%= isActive('/conflicts') ? 'active' : '' %>">Conflicts<% if (conflictCount) { %> <span class="badge"><%= conflictCount %></span><% } %></a>
       <a href="/admin/duplicates" class="<%= isActive('/duplicates') ? 'active' : '' %>">Duplicates</a>
     </div>
     <a href="/" class="view-map">View Map</a>

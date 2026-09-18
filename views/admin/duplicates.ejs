@@ -2,8 +2,8 @@
 
 <% if (error) { %><div class="error"><%= error %></div><% } %>
 
-<p class="muted">Pins that geocode within 150m of each other, or share a near-identical title. Keep one side
-   as-is, merge the two into one record, or mark the pair as not actually a duplicate.</p>
+<p class="muted">Pins with the same address, that geocode within 150m of each other, or share a near-identical
+   title. Keep one side as-is, merge the two into one record, or mark the pair as not actually a duplicate.</p>
 
 <% if (pairs.length === 0) { %>
   <p class="muted">No potential duplicates found.</p>
@@ -12,9 +12,12 @@
 <% pairs.forEach(function(p) { %>
   <div class="card">
     <div class="muted">
+      <% if (p.addressMatch) { %>same address<% } %>
+      <% if (p.addressMatch && p.closeBy) { %> · <% } %>
       <% if (p.closeBy) { %>~<%= Math.round(p.distanceMeters) %>m apart<% } %>
-      <% if (p.closeBy && p.similarTitle) { %> · <% } %>
+      <% if ((p.addressMatch || p.closeBy) && p.similarTitle) { %> · <% } %>
       <% if (p.similarTitle) { %>titles <%= Math.round(p.similarity * 100) %>% similar<% } %>
+      <% if (!p.sameOrg) { %> · <strong>different organizations</strong><% } %>
     </div>
 
     <div class="dup-columns">

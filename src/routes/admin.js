@@ -39,6 +39,7 @@ router.use((req, res, next) => {
   res.locals.currentPath = req.path;
   res.locals.reviewCount = db.prepare("SELECT COUNT(*) AS n FROM scrape_candidates WHERE status = 'pending'").get().n;
   res.locals.geolocationCount = db.prepare("SELECT COUNT(*) AS n FROM scrape_candidates WHERE status = 'approved'").get().n;
+  res.locals.conflictCount = db.prepare("SELECT COUNT(*) AS n FROM scrape_candidates WHERE status = 'conflict'").get().n;
   next();
 });
 
@@ -419,8 +420,34 @@ router.post('/candidates/bulk-delete', (req, res) => {
   res.redirect('/admin/candidates');
 });
 
+// Re-scraping found this same listing again — touch the existing pin's
+// source/timestamp, and upgrade its address/coordinates if this scrape came
+// back more precise than what's stored (see duplicates.js precision ladder).
+// This is what lets daily re-scraping of up to ~1000 locations run without a
+// human: same organization at the same address is never a new pin.
+function refreshMassCenterFromCandidate(mc, candidate) {
+  const useNew = duplicates.isMorePrecise(candidate.precision, mc.precision);
+  const merged = {
+    address: useNew ? candidate.raw_address : mc.address,
+    latitude: useNew ? candidate.latitude : mc.latitude,
+    longitude: useNew ? candidate.longitude : mc.longitude,
+    precision: useNew ? candidate.precision : mc.precision,
+  };
+  db.prepare(
+    `UPDATE mass_centers SET address = ?, latitude = ?, longitude = ?, precision = ?,
+       source_url = COALESCE(?, source_url), updated_at = datetime('now')
+     WHERE id = ?`
+  ).run(merged.address, merged.latitude, merged.longitude, merged.precision, candidate.source_url || null, mc.id);
+  Object.assign(mc, merged);
+  return mc;
+}
+
 // Confirms every approved candidate that's already geocoded and titled, in
 // one go. Candidates missing either are left in the queue for manual review.
+// Each one is checked against existing pins first (see duplicates.js): a
+// same-organization match refreshes that pin instead of creating a new one,
+// a different-organization match is held as a conflict for /admin/conflicts,
+// and only a genuinely new location becomes a new pin.
 router.post('/candidates/confirm-all', (req, res) => {
   const ready = db
     .prepare("SELECT * FROM scrape_candidates WHERE status = 'approved' AND latitude IS NOT NULL AND title IS NOT NULL AND title != ''")
@@ -431,10 +458,34 @@ router.post('/candidates/confirm-all', (req, res) => {
      VALUES (?, ?, ?, ?, ?, ?, ?)`
   );
   const markConfirmed = db.prepare("UPDATE scrape_candidates SET status = 'confirmed' WHERE id = ?");
+  const markConflict = db.prepare("UPDATE scrape_candidates SET status = 'conflict', conflict_mass_center_id = ? WHERE id = ?");
 
   const confirmAll = db.transaction((rows) => {
+    // Fetched once and kept in sync locally (rather than re-queried per row)
+    // so two candidates in the same batch that duplicate each other, or a
+    // freshly-inserted pin later in the batch, are still caught.
+    const centers = db.prepare('SELECT * FROM mass_centers').all();
     for (const c of rows) {
-      insertMassCenter.run(c.title.trim(), c.raw_address, c.latitude, c.longitude, c.precision, c.organization_id, c.source_url);
+      const match = duplicates.findMassCenterMatch(c, centers);
+      if (match && !match.sameOrg) {
+        markConflict.run(match.massCenter.id, c.id);
+        continue;
+      }
+      if (match) {
+        refreshMassCenterFromCandidate(match.massCenter, c);
+        markConfirmed.run(c.id);
+        continue;
+      }
+      const info = insertMassCenter.run(c.title.trim(), c.raw_address, c.latitude, c.longitude, c.precision, c.organization_id, c.source_url);
+      centers.push({
+        id: info.lastInsertRowid,
+        title: c.title,
+        address: c.raw_address,
+        latitude: c.latitude,
+        longitude: c.longitude,
+        organization_id: c.organization_id,
+        precision: c.precision,
+      });
       markConfirmed.run(c.id);
     }
   });
@@ -494,10 +545,31 @@ router.post('/candidates/:id/confirm', async (req, res) => {
     }
   }
 
-  db.prepare(
-    `INSERT INTO mass_centers (title, address, latitude, longitude, precision, organization_id, source_url)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).run(title.trim(), address.trim(), coords.latitude, coords.longitude, precision, candidate.organization_id, candidate.source_url);
+  // Check against existing pins before publishing — same organization at the
+  // same address is a re-scrape, not a new location (see duplicates.js).
+  const resolved = {
+    raw_address: address.trim(),
+    latitude: coords.latitude,
+    longitude: coords.longitude,
+    precision,
+    organization_id: candidate.organization_id,
+    source_url: candidate.source_url,
+  };
+  const match = duplicates.findMassCenterMatch(resolved);
+  if (match && !match.sameOrg) {
+    db.prepare(
+      "UPDATE scrape_candidates SET status = 'conflict', conflict_mass_center_id = ? WHERE id = ?"
+    ).run(match.massCenter.id, req.params.id);
+    return res.redirect('/admin/candidates');
+  }
+  if (match) {
+    refreshMassCenterFromCandidate(match.massCenter, resolved);
+  } else {
+    db.prepare(
+      `INSERT INTO mass_centers (title, address, latitude, longitude, precision, organization_id, source_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(title.trim(), address.trim(), coords.latitude, coords.longitude, precision, candidate.organization_id, candidate.source_url);
+  }
   db.prepare("UPDATE scrape_candidates SET status = 'confirmed' WHERE id = ?").run(req.params.id);
   res.redirect('/admin/candidates');
 });
@@ -505,6 +577,77 @@ router.post('/candidates/:id/confirm', async (req, res) => {
 router.post('/candidates/:id/reject', (req, res) => {
   db.prepare("UPDATE scrape_candidates SET status = 'rejected' WHERE id = ?").run(req.params.id);
   res.redirect('/admin/candidates');
+});
+
+// --- Conflicts ---------------------------------------------------------
+// Candidates that matched an existing pin's address/location under a
+// different organization (set by the confirm routes above via
+// duplicates.findMassCenterMatch) — held here instead of auto-publishing,
+// since it could mean the location changed hands or two organizations share
+// a building, and either way a human should decide before it reaches the map.
+
+function getConflictCandidates() {
+  return db
+    .prepare(
+      `SELECT sc.*, o.name AS organization_name, o.abbreviation AS organization_abbreviation,
+              mc.title AS existing_title, mc.address AS existing_address, mc.precision AS existing_precision,
+              eo.name AS existing_organization_name
+       FROM scrape_candidates sc
+       LEFT JOIN organizations o ON o.id = sc.organization_id
+       LEFT JOIN mass_centers mc ON mc.id = sc.conflict_mass_center_id
+       LEFT JOIN organizations eo ON eo.id = mc.organization_id
+       WHERE sc.status = 'conflict'
+       ORDER BY sc.created_at DESC`
+    )
+    .all();
+}
+
+router.get('/conflicts', (req, res) => {
+  res.render('admin/conflicts', { candidates: getConflictCandidates(), error: null });
+});
+
+// Genuinely a different place (e.g. two organizations sharing a building) —
+// publish it as its own pin, and remember the pair so it never re-flags.
+router.post('/conflicts/:id/not-duplicate', (req, res) => {
+  const candidate = db.prepare("SELECT * FROM scrape_candidates WHERE id = ? AND status = 'conflict'").get(req.params.id);
+  if (!candidate) return res.status(404).send('Not found');
+  const info = db
+    .prepare(
+      `INSERT INTO mass_centers (title, address, latitude, longitude, precision, organization_id, source_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(candidate.title.trim(), candidate.raw_address, candidate.latitude, candidate.longitude, candidate.precision, candidate.organization_id, candidate.source_url);
+  duplicates.dismissPair(candidate.conflict_mass_center_id, info.lastInsertRowid);
+  db.prepare("UPDATE scrape_candidates SET status = 'confirmed' WHERE id = ?").run(candidate.id);
+  res.redirect('/admin/conflicts');
+});
+
+// Same place — the organization changed (or was wrong to begin with); update
+// the existing pin from this candidate's data and drop the candidate.
+router.post('/conflicts/:id/update-existing', (req, res) => {
+  const candidate = db.prepare("SELECT * FROM scrape_candidates WHERE id = ? AND status = 'conflict'").get(req.params.id);
+  if (!candidate) return res.status(404).send('Not found');
+  db.prepare(
+    `UPDATE mass_centers SET title = ?, address = ?, latitude = ?, longitude = ?, precision = ?, organization_id = ?,
+       source_url = ?, updated_at = datetime('now')
+     WHERE id = ?`
+  ).run(
+    candidate.title.trim(),
+    candidate.raw_address,
+    candidate.latitude,
+    candidate.longitude,
+    candidate.precision,
+    candidate.organization_id,
+    candidate.source_url,
+    candidate.conflict_mass_center_id
+  );
+  db.prepare("UPDATE scrape_candidates SET status = 'confirmed' WHERE id = ?").run(candidate.id);
+  res.redirect('/admin/conflicts');
+});
+
+router.post('/conflicts/:id/reject', (req, res) => {
+  db.prepare("UPDATE scrape_candidates SET status = 'rejected' WHERE id = ? AND status = 'conflict'").run(req.params.id);
+  res.redirect('/admin/conflicts');
 });
 
 // --- Duplicate detection ----------------------------------------------------

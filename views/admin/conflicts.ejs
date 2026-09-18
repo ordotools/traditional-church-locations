@@ -1,0 +1,45 @@
+<%- include('../partials/header', { title: 'Conflicts', bodyClass: 'wide' }) %>
+
+<% if (error) { %><div class="error"><%= error %></div><% } %>
+
+<p class="muted">Scraped candidates whose address/location matched an existing pin, but under a different
+   organization — held here instead of publishing automatically. Either the location changed hands
+   (update the existing pin), or two organizations legitimately share this address (publish as a
+   separate pin).</p>
+
+<% if (candidates.length === 0) { %>
+  <p class="muted">No conflicts awaiting review.</p>
+<% } %>
+
+<% candidates.forEach(function(c) { %>
+  <div class="card">
+    <div class="dup-columns">
+      <div class="dup-column">
+        <div class="muted">New candidate · from <a class="muted" href="<%= c.source_url %>"><%= c.source_url %></a></div>
+        <strong><%= c.title %></strong>
+        <div class="muted"><%= c.raw_address %></div>
+        <div class="muted"><%= c.organization_name || '—' %></div>
+      </div>
+      <div class="dup-column">
+        <div class="muted">Existing pin</div>
+        <strong><%= c.existing_title %></strong>
+        <div class="muted"><%= c.existing_address %></div>
+        <div class="muted"><%= c.existing_organization_name || '—' %></div>
+      </div>
+    </div>
+
+    <div class="candidate-actions" style="margin-top:0.75rem;">
+      <form method="post" action="/admin/conflicts/<%= c.id %>/update-existing" style="display:inline;">
+        <button type="submit">Same place — update existing pin</button>
+      </form>
+      <form method="post" action="/admin/conflicts/<%= c.id %>/not-duplicate" style="display:inline;">
+        <button type="submit" class="secondary">Not a duplicate — publish separately</button>
+      </form>
+      <form method="post" action="/admin/conflicts/<%= c.id %>/reject" style="display:inline;">
+        <button type="submit" class="secondary">Reject candidate</button>
+      </form>
+    </div>
+  </div>
+<% }) %>
+
+<%- include('../partials/footer') %>

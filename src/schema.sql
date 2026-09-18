@@ -56,5 +56,9 @@ CREATE TABLE IF NOT EXISTS scrape_candidates (
   latitude REAL,
   longitude REAL,
   status TEXT NOT NULL DEFAULT 'pending',
+  -- Set when status = 'conflict': the existing mass center this candidate's
+  -- address/location matched under a different organization, awaiting a
+  -- human decision on /admin/conflicts.
+  conflict_mass_center_id INTEGER REFERENCES mass_centers(id) ON DELETE SET NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
