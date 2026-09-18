@@ -43,14 +43,15 @@ const CASCADE_STEP_DELAY_MS = 1100;
 
 // A full street address often can't be found (OpenStreetMap has real
 // coverage gaps — see README), which used to just leave a candidate stuck
-// unconfirmed. Instead, fall back to whatever's less specific: city, then
-// state/province, then country — each only attempted if that field is
-// actually present. Returns the coordinates AND the precision tier that
-// actually succeeded (which may be coarser than the input data implied),
-// or null if every available tier failed.
-async function geocodeCascade({ address, city, state, country }) {
+// unconfirmed. Instead, fall back to whatever's less specific: postal code,
+// then city, then state/province, then country — each only attempted if
+// that field is actually present. Returns the coordinates AND the precision
+// tier that actually succeeded (which may be coarser than the input data
+// implied), or null if every available tier failed.
+async function geocodeCascade({ address, postalCode, city, state, country }) {
   const attempts = [];
   if (address) attempts.push({ precision: 'exact', run: () => geocodeAddress(address) });
+  if (postalCode) attempts.push({ precision: 'postal', run: () => geocodeStructured({ postalcode: postalCode, country }) });
   if (city) attempts.push({ precision: 'city', run: () => geocodeStructured({ city, state, country }) });
   if (state) attempts.push({ precision: 'state', run: () => geocodeStructured({ state, country }) });
   if (country) attempts.push({ precision: 'country', run: () => geocodeStructured({ country }) });

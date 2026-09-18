@@ -1,6 +1,7 @@
 <%- include('../partials/header', { title: 'Scrape Review' }) %>
 
 <% if (error) { %><div class="error"><%= error %></div><% } %>
+<% if (notice) { %><div class="notice"><%= notice %></div><% } %>
 
 <p class="muted">
   Raw results from a scrape, before anything is geocoded. Check the title, address, and

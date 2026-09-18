@@ -33,22 +33,36 @@ async function scrapeCandidates(url) {
   // inconsistency this is meant to fix. Fall back to the heuristic extractor
   // only when AI isn't configured (no TCL_GEMINI_API_KEY — extract() no-ops to
   // []), or errors out, or genuinely finds nothing.
+  //
+  // A configured-but-unused AI extractor is worth flagging loudly: it's
+  // exactly the failure mode that silently looked like "it's working" before
+  // (see conversation history) — a dead key or a retired model, quietly
+  // papered over by the fallback, indistinguishable from normal operation
+  // unless something says so.
   let candidates = [];
-  try {
-    candidates = await aiExtractor.extract($);
-  } catch {
-    candidates = [];
+  let aiWarning = null;
+  if (aiExtractor.isConfigured) {
+    try {
+      candidates = await aiExtractor.extract($);
+      if (!candidates.length) aiWarning = 'AI extraction returned no results; used the fallback extractor instead.';
+    } catch (err) {
+      aiWarning = `AI extraction failed (${err.message}); used the fallback extractor instead.`;
+    }
   }
-  if (!candidates.length) candidates = heuristicExtractor.extract($);
+  if (!candidates.length) {
+    if (aiWarning) console.warn(`[scraper] ${url}: ${aiWarning}`);
+    candidates = heuristicExtractor.extract($);
+  }
 
   // De-dupe identical (title, address) pairs the page might repeat.
   const seen = new Set();
-  return candidates.filter((c) => {
+  const deduped = candidates.filter((c) => {
     const key = `${c.title}|${c.address}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+  return { candidates: deduped, aiWarning };
 }
 
 module.exports = { scrapeCandidates, US_STATES: generic.US_STATES };

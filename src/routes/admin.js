@@ -281,21 +281,23 @@ function touchSavedSource(url, organizationId) {
 // this one request would take many minutes and risk timing out. Candidates
 // go to Scrape Review first; geocoding happens after approval, either
 // per-candidate on confirm or in bulk via the "Geocode All Pending" job.
-// Throws if the fetch fails; returns the candidate count (0 = none found).
+// Throws if the fetch fails; returns { count, aiWarning } (count 0 = none
+// found; aiWarning set when AI was configured but ended up unused for this
+// page — see scraper.js).
 async function runScrape(url, organizationId) {
-  const candidates = await scrapeCandidates(url);
-  if (!candidates.length) return 0;
+  const { candidates, aiWarning } = await scrapeCandidates(url);
+  if (!candidates.length) return { count: 0, aiWarning };
 
   const insert = db.prepare(
-    `INSERT INTO scrape_candidates (source_url, organization_id, title, raw_address, city, state, country, precision)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO scrape_candidates (source_url, organization_id, title, raw_address, city, state, country, postal_code, precision)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   for (const c of candidates) {
     const candidateOrgId = organizationId || getOrCreateOrganizationByAbbreviation(c.organizationAbbreviation);
-    insert.run(url, candidateOrgId || null, c.title, c.address, c.city, c.state, c.country || null, c.precision);
+    insert.run(url, candidateOrgId || null, c.title, c.address, c.city, c.state, c.country || null, c.postalCode || null, c.precision);
   }
   touchSavedSource(url, organizationId);
-  return candidates.length;
+  return { count: candidates.length, aiWarning };
 }
 
 router.get('/scrape', (req, res) => {
@@ -308,7 +310,7 @@ router.post('/scrape', async (req, res) => {
     return res.render('admin/scrape', { organizations: getOrganizations(), sources: getSavedSources(), error: 'URL is required.' });
   }
   try {
-    const count = await runScrape(url, organization_id);
+    const { count, aiWarning } = await runScrape(url, organization_id);
     if (!count) {
       return res.render('admin/scrape', {
         organizations: getOrganizations(),
@@ -316,7 +318,7 @@ router.post('/scrape', async (req, res) => {
         error: 'No addresses were found on that page.',
       });
     }
-    res.redirect('/admin/review');
+    res.redirect(`/admin/review${aiWarning ? `?ai_warning=${encodeURIComponent(aiWarning)}` : ''}`);
   } catch (err) {
     res.render('admin/scrape', { organizations: getOrganizations(), sources: getSavedSources(), error: err.message });
   }
@@ -327,7 +329,7 @@ router.post('/scrape/sources/:id/run', async (req, res) => {
   const source = db.prepare('SELECT * FROM saved_sources WHERE id = ?').get(req.params.id);
   if (!source) return res.status(404).send('Not found');
   try {
-    const count = await runScrape(source.url, source.organization_id);
+    const { count, aiWarning } = await runScrape(source.url, source.organization_id);
     if (!count) {
       return res.render('admin/scrape', {
         organizations: getOrganizations(),
@@ -335,7 +337,7 @@ router.post('/scrape/sources/:id/run', async (req, res) => {
         error: `No addresses were found on ${source.url}.`,
       });
     }
-    res.redirect('/admin/review');
+    res.redirect(`/admin/review${aiWarning ? `?ai_warning=${encodeURIComponent(aiWarning)}` : ''}`);
   } catch (err) {
     res.render('admin/scrape', { organizations: getOrganizations(), sources: getSavedSources(), error: err.message });
   }
@@ -367,7 +369,7 @@ router.post('/scrape/sources/:id/delete', (req, res) => {
 // bulk — nothing reaches the map without passing through both queues.
 
 router.get('/review', (req, res) => {
-  res.render('admin/review', { candidates: getCandidatesByStatus('pending'), error: null });
+  res.render('admin/review', { candidates: getCandidatesByStatus('pending'), error: null, notice: req.query.ai_warning || null });
 });
 
 router.post('/review/bulk', (req, res) => {
@@ -470,6 +472,7 @@ router.post('/candidates/:id/confirm', async (req, res) => {
     try {
       const result = await geocodeCascade({
         address: address.trim(),
+        postalCode: candidate.postal_code,
         city: candidate.city,
         state: candidate.state,
         country: candidate.country,

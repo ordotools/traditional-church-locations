@@ -15,7 +15,7 @@ function startGeocodingAllPending() {
   if (state.running) return state;
 
   const pending = db
-    .prepare("SELECT id, raw_address, city, state, country FROM scrape_candidates WHERE status = 'approved' AND latitude IS NULL")
+    .prepare("SELECT id, raw_address, city, state, country, postal_code FROM scrape_candidates WHERE status = 'approved' AND latitude IS NULL")
     .all();
   state = { running: true, total: pending.length, done: 0, failed: 0 };
 
@@ -23,7 +23,13 @@ function startGeocodingAllPending() {
     const update = db.prepare('UPDATE scrape_candidates SET latitude = ?, longitude = ?, precision = ? WHERE id = ?');
     for (const row of pending) {
       try {
-        const result = await geocodeCascade({ address: row.raw_address, city: row.city, state: row.state, country: row.country });
+        const result = await geocodeCascade({
+          address: row.raw_address,
+          postalCode: row.postal_code,
+          city: row.city,
+          state: row.state,
+          country: row.country,
+        });
         if (result) update.run(result.coords.latitude, result.coords.longitude, result.precision, row.id);
         else state.failed++;
       } catch {
