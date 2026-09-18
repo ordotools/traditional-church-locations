@@ -436,6 +436,40 @@ body.admin button.secondary:hover {
   border-color: var(--admin-accent);
 }
 
+/* htmx adds .htmx-request to a (boosted) form for the duration of its
+   request — dim it, block clicks on it, and spin, so Scrape/Confirm/Geocode
+   give feedback instead of going silent until the page swaps, and so the
+   same action can't be double-fired while it's in flight. */
+body.admin form.htmx-request {
+  position: relative;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+body.admin form.htmx-request::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1.4rem;
+  height: 1.4rem;
+  margin: -0.7rem 0 0 -0.7rem;
+  border: 3px solid var(--admin-accent);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: admin-spin 0.6s linear infinite;
+}
+
+@keyframes admin-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.admin form.htmx-request::after {
+    animation: none;
+  }
+}
+
 body.admin .error, body.admin .notice {
   border: 1px solid var(--admin-border-strong);
   border-radius: 6px;
