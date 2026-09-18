@@ -21,6 +21,7 @@ const MIGRATIONS = [
   ['scrape_candidates', 'title', 'TEXT'],
   ['scrape_candidates', 'city', 'TEXT'],
   ['scrape_candidates', 'state', 'TEXT'],
+  ['scrape_candidates', 'country', 'TEXT'],
   ['scrape_candidates', 'precision', "TEXT NOT NULL DEFAULT 'exact'"],
 ];
 for (const [table, column, definition] of MIGRATIONS) {

@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS scrape_candidates (
   raw_address TEXT NOT NULL,
   city TEXT,
   state TEXT,
+  country TEXT,
   precision TEXT NOT NULL DEFAULT 'exact',
   latitude REAL,
   longitude REAL,

@@ -1,5 +1,5 @@
 const db = require('./db');
-const { geocodeAddress, sleep, BULK_INTERVAL_MS } = require('./geocode');
+const { geocodeCascade, sleep, BULK_INTERVAL_MS } = require('./geocode');
 
 // A single in-memory job, since this is a single-process app. Progress lives
 // in the scrape_candidates rows themselves (latitude IS NULL = not yet
@@ -15,16 +15,16 @@ function startGeocodingAllPending() {
   if (state.running) return state;
 
   const pending = db
-    .prepare("SELECT id, raw_address FROM scrape_candidates WHERE status = 'approved' AND latitude IS NULL")
+    .prepare("SELECT id, raw_address, city, state, country FROM scrape_candidates WHERE status = 'approved' AND latitude IS NULL")
     .all();
   state = { running: true, total: pending.length, done: 0, failed: 0 };
 
   (async () => {
-    const update = db.prepare('UPDATE scrape_candidates SET latitude = ?, longitude = ? WHERE id = ?');
+    const update = db.prepare('UPDATE scrape_candidates SET latitude = ?, longitude = ?, precision = ? WHERE id = ?');
     for (const row of pending) {
       try {
-        const coords = await geocodeAddress(row.raw_address);
-        if (coords) update.run(coords.latitude, coords.longitude, row.id);
+        const result = await geocodeCascade({ address: row.raw_address, city: row.city, state: row.state, country: row.country });
+        if (result) update.run(result.coords.latitude, result.coords.longitude, result.precision, row.id);
         else state.failed++;
       } catch {
         state.failed++;

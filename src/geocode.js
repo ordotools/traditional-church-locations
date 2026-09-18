@@ -22,4 +22,45 @@ async function geocodeAddress(address) {
   return { latitude: parseFloat(results[0].lat), longitude: parseFloat(results[0].lon) };
 }
 
-module.exports = { geocodeAddress, sleep, BULK_INTERVAL_MS };
+// Nominatim's "structured" search — city/state/country passed as separate
+// params instead of one freeform string — used by geocodeCascade's fallback
+// tiers below, since those tiers deliberately have no street to put in `q=`.
+async function geocodeStructured(fields) {
+  const qs = new URLSearchParams({ format: 'json', limit: '1' });
+  for (const [key, value] of Object.entries(fields)) {
+    if (value) qs.set(key, value);
+  }
+  const res = await fetch(`https://nominatim.openstreetmap.org/search?${qs}`, { headers: { 'User-Agent': USER_AGENT } });
+  if (!res.ok) throw new Error(`Geocoding request failed with status ${res.status}`);
+  const results = await res.json();
+  if (!results.length) return null;
+  return { latitude: parseFloat(results[0].lat), longitude: parseFloat(results[0].lon) };
+}
+
+// Nominatim's policy floor (1 req/sec) applies between these cascade steps
+// too, since they're just more requests to the same API in the same call.
+const CASCADE_STEP_DELAY_MS = 1100;
+
+// A full street address often can't be found (OpenStreetMap has real
+// coverage gaps — see README), which used to just leave a candidate stuck
+// unconfirmed. Instead, fall back to whatever's less specific: city, then
+// state/province, then country — each only attempted if that field is
+// actually present. Returns the coordinates AND the precision tier that
+// actually succeeded (which may be coarser than the input data implied),
+// or null if every available tier failed.
+async function geocodeCascade({ address, city, state, country }) {
+  const attempts = [];
+  if (address) attempts.push({ precision: 'exact', run: () => geocodeAddress(address) });
+  if (city) attempts.push({ precision: 'city', run: () => geocodeStructured({ city, state, country }) });
+  if (state) attempts.push({ precision: 'state', run: () => geocodeStructured({ state, country }) });
+  if (country) attempts.push({ precision: 'country', run: () => geocodeStructured({ country }) });
+
+  for (let i = 0; i < attempts.length; i++) {
+    if (i > 0) await sleep(CASCADE_STEP_DELAY_MS);
+    const coords = await attempts[i].run();
+    if (coords) return { coords, precision: attempts[i].precision };
+  }
+  return null;
+}
+
+module.exports = { geocodeAddress, geocodeCascade, sleep, BULK_INTERVAL_MS };

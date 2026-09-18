@@ -48,7 +48,7 @@
       <input class="candidate-select" type="checkbox" form="bulk-delete" name="ids" value="<%= c.id %>"> Select for bulk delete
     </label>
     <div class="muted">
-      <%= c.precision === 'exact' ? 'Address' : (c.precision === 'city' ? 'City-level (approximate)' : 'State-level (approximate)') %>
+      <%= c.precision === 'exact' ? 'Address' : c.precision === 'city' ? 'City-level (approximate)' : c.precision === 'state' ? 'State-level (approximate)' : 'Country-level (approximate)' %>
       <% if (c.organization_name) { %> · <%= c.organization_name %> (<%= c.organization_abbreviation %>)<% } %>
       · from <%= c.source_url %>
     </div>

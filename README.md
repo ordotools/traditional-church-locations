@@ -8,8 +8,11 @@ each pin is colored by the organization that runs that Mass center.
 - Node.js + Express, EJS templates for the admin panel
 - SQLite via `better-sqlite3` (single file at `data/db.sqlite`)
 - Leaflet.js (loaded from a CDN) for the map, rendered in grayscale
-- Geocoding via the free OpenStreetMap Nominatim API
-- Scraping via `cheerio` plus a regex-based address finder
+- Geocoding via the free OpenStreetMap Nominatim API, with a fallback ladder
+  (full address → city → state → country) when the exact address can't be found
+- Scraping via Gemini AI extraction (`TCL_GEMINI_API_KEY`) for consistent results
+  across every site, falling back to `cheerio` plus a regex-based address
+  finder when no key is set, the AI call errors, or it finds nothing
 
 No build step, no frontend framework.
 
@@ -54,17 +57,30 @@ included `Dockerfile`.
    pin. Organization abbreviations that aren't in your Organizations table
    yet are created automatically — rename them from the Organizations page.
 
+   When `TCL_GEMINI_API_KEY` is set, every page is extracted by Gemini rather
+   than the regex/table heuristic, so results are consistent site to site —
+   the heuristic extractor can "succeed" (find rows) while still producing
+   malformed addresses, which per-site AI extraction avoids. The prompt is
+   instructed to leave a field blank rather than guess at it, and either way
+   every result still lands in the review queue below rather than going
+   straight to the map. The heuristic/site-specific extractors are only used
+   as a fallback — no API key configured, the AI call errors, or it finds
+   nothing on the page.
+
    Nothing is geocoded during scraping (a large directory can have hundreds
    of entries, which would block the request for many minutes). Instead, on
    the Review Candidates page you can either confirm candidates one at a
    time (each is geocoded on demand) or click "Geocode All Pending" to
    geocode the rest in the background at a configurable interval
    (`GEOCODE_INTERVAL_MS`, default 5s) — the page shows progress and you can
-   keep confirming already-geocoded candidates while it runs.
+   keep confirming already-geocoded candidates while it runs. If the full
+   address can't be found, geocoding falls back to city, then state, then
+   country — whichever of those the extractor captured — so a candidate still
+   gets a pin (marked with its actual precision) instead of getting stuck.
 
 ## Data model
 
 - `organizations` — name, abbreviation, color
-- `mass_centers` — the pins: title, address, lat/lng, precision (exact/city/state), organization
+- `mass_centers` — the pins: title, address, lat/lng, precision (exact/city/state/country), organization
 - `scrape_candidates` — listings found by scraping, pending review: title,
-  address (or city/state fallback), precision, organization, geocoded lat/lng
+  address, city/state/country, precision, organization, geocoded lat/lng

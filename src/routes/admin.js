@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../db');
-const { geocodeAddress } = require('../geocode');
+const { geocodeAddress, geocodeCascade } = require('../geocode');
 const { scrapeCandidates } = require('../scraper');
 const geocodeQueue = require('../geocodeQueue');
 const duplicates = require('../duplicates');
@@ -287,12 +287,12 @@ async function runScrape(url, organizationId) {
   if (!candidates.length) return 0;
 
   const insert = db.prepare(
-    `INSERT INTO scrape_candidates (source_url, organization_id, title, raw_address, city, state, precision)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO scrape_candidates (source_url, organization_id, title, raw_address, city, state, country, precision)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   );
   for (const c of candidates) {
     const candidateOrgId = organizationId || getOrCreateOrganizationByAbbreviation(c.organizationAbbreviation);
-    insert.run(url, candidateOrgId || null, c.title, c.address, c.city, c.state, c.precision);
+    insert.run(url, candidateOrgId || null, c.title, c.address, c.city, c.state, c.country || null, c.precision);
   }
   touchSavedSource(url, organizationId);
   return candidates.length;
@@ -444,6 +444,7 @@ router.post('/candidates/:id/confirm', async (req, res) => {
   if (!address) return renderError('An address is required to confirm a pin.');
 
   let coords;
+  let precision = candidate.precision;
   try {
     coords = parseManualCoords(manualLat, manualLng);
   } catch (err) {
@@ -464,26 +465,27 @@ router.post('/candidates/:id/confirm', async (req, res) => {
   if (!coords) {
     // Not geocoded yet (or address just changed) — geocode now, on demand,
     // so confirming one at a time never has to wait for the background job.
+    // Falls back through city/state/country if the full address can't be
+    // found (Nominatim has real coverage gaps) instead of just failing.
     try {
-      coords = await geocodeAddress(address.trim());
+      const result = await geocodeCascade({
+        address: address.trim(),
+        city: candidate.city,
+        state: candidate.state,
+        country: candidate.country,
+      });
+      if (!result) return renderError('This address could not be geocoded. Correct it above, or enter latitude/longitude manually.');
+      coords = result.coords;
+      precision = result.precision;
     } catch (err) {
       return renderError(err.message);
     }
-    if (!coords) return renderError('This address could not be geocoded. Correct it above, or enter latitude/longitude manually.');
   }
 
   db.prepare(
     `INSERT INTO mass_centers (title, address, latitude, longitude, precision, organization_id, source_url)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).run(
-    title.trim(),
-    address.trim(),
-    coords.latitude,
-    coords.longitude,
-    candidate.precision,
-    candidate.organization_id,
-    candidate.source_url
-  );
+  ).run(title.trim(), address.trim(), coords.latitude, coords.longitude, precision, candidate.organization_id, candidate.source_url);
   db.prepare("UPDATE scrape_candidates SET status = 'confirmed' WHERE id = ?").run(req.params.id);
   res.redirect('/admin/candidates');
 });

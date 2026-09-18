@@ -1,6 +1,7 @@
 const cheerio = require('cheerio');
 const generic = require('./scrapers/generic');
 const siteRegistry = require('./scrapers/registry');
+const aiExtractor = require('./scrapers/ai');
 
 // fetch's res.text() always decodes as UTF-8 regardless of the page's real
 // encoding. Some of these directory pages are Word exports saved as
@@ -24,8 +25,21 @@ async function scrapeCandidates(url) {
   const parsedUrl = new URL(url);
   const hostname = parsedUrl.hostname.replace(/^www\./, '');
   const pageKey = `${hostname}${parsedUrl.pathname}`.toLowerCase();
-  const extractor = siteRegistry.resolve(hostname, pageKey) || generic;
-  const candidates = extractor.extract($);
+  const heuristicExtractor = siteRegistry.resolve(hostname, pageKey) || generic;
+
+  // AI is the primary extractor on every site, not just ones the regex/table
+  // heuristics fail on outright — a heuristic extractor can "succeed" (find
+  // rows) while still producing malformed addresses, which is exactly the
+  // inconsistency this is meant to fix. Fall back to the heuristic extractor
+  // only when AI isn't configured (no TCL_GEMINI_API_KEY — extract() no-ops to
+  // []), or errors out, or genuinely finds nothing.
+  let candidates = [];
+  try {
+    candidates = await aiExtractor.extract($);
+  } catch {
+    candidates = [];
+  }
+  if (!candidates.length) candidates = heuristicExtractor.extract($);
 
   // De-dupe identical (title, address) pairs the page might repeat.
   const seen = new Set();
