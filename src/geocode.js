@@ -14,12 +14,16 @@ function sleep(ms) {
 }
 
 async function geocodeAddress(address) {
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`;
+  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q=${encodeURIComponent(address)}`;
   const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
   if (!res.ok) throw new Error(`Geocoding request failed with status ${res.status}`);
   const results = await res.json();
   if (!results.length) return null;
-  return { latitude: parseFloat(results[0].lat), longitude: parseFloat(results[0].lon) };
+  return {
+    latitude: parseFloat(results[0].lat),
+    longitude: parseFloat(results[0].lon),
+    country: results[0].address?.country || null,
+  };
 }
 
 // Nominatim's "structured" search — city/state/country passed as separate

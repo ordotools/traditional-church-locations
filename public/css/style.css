@@ -543,7 +543,7 @@ body.admin .error {
   flex-wrap: wrap;
 }
 
-a.stat {
+.stat-row .stat {
   flex: 1 1 160px;
   text-decoration: none;
   background: var(--admin-surface);
@@ -773,6 +773,17 @@ body.admin.login-page .container {
 
 #legend-body {
   line-height: 1.7;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  gap: 0.3rem;
+}
+
+.legend-item input[type="checkbox"] {
+  margin: 0;
 }
 
 /* Render map tiles in grayscale to keep the black-and-white theme. */

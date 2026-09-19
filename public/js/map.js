@@ -55,6 +55,17 @@ function markerIcon(color) {
   });
 }
 
+// Each org's markers live in their own layer group so the legend checkbox
+// can show/hide them with map.addLayer/removeLayer instead of tracking
+// individual markers.
+const orgLayers = new Map();
+function layerForOrg(name) {
+  if (!orgLayers.has(name)) {
+    orgLayers.set(name, L.layerGroup().addTo(map));
+  }
+  return orgLayers.get(name);
+}
+
 function renderLegend(pins) {
   const orgs = new Map();
   pins.forEach((pin) => {
@@ -67,9 +78,20 @@ function renderLegend(pins) {
   const body = document.getElementById('legend-body');
   let html = '';
   orgs.forEach((color, name) => {
-    html += `<div><span class="swatch" style="background:${color}"></span>${escapeHtml(name)}</div>`;
+    html +=
+      `<label class="legend-item">` +
+      `<input type="checkbox" checked data-org="${escapeHtml(name)}">` +
+      `<span class="swatch" style="background:${color}"></span>${escapeHtml(name)}` +
+      `</label>`;
   });
   body.innerHTML = html;
+  body.addEventListener('change', (e) => {
+    const org = e.target.dataset.org;
+    if (!org) return;
+    const layer = layerForOrg(org);
+    if (e.target.checked) map.addLayer(layer);
+    else map.removeLayer(layer);
+  });
   document.getElementById('legend').hidden = false;
 }
 
@@ -93,7 +115,7 @@ fetch('/api/pins')
 
       const marker = L.marker([pin.latitude, pin.longitude], {
         icon: markerIcon(pin.organization_color),
-      }).addTo(map);
+      }).addTo(pin.organization_name ? layerForOrg(pin.organization_name) : map);
       markers.push(marker);
 
       const orgLine = pin.organization_name

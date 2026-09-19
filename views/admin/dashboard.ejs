@@ -19,6 +19,84 @@
   </a>
 </div>
 
+<h2>Stats</h2>
+<div class="stat-row">
+  <div class="stat">
+    <span class="n"><%= pageViews.today %></span>
+    <span class="label">Page Views Today</span>
+  </div>
+  <div class="stat">
+    <span class="n"><%= pageViews.last7Days %></span>
+    <span class="label">Last 7 Days</span>
+  </div>
+  <div class="stat">
+    <span class="n"><%= pageViews.last30Days %></span>
+    <span class="label">Last 30 Days</span>
+  </div>
+  <div class="stat">
+    <span class="n"><%= pageViews.total %></span>
+    <span class="label">All-Time Page Views</span>
+  </div>
+</div>
+
+<div class="two-col">
+  <div>
+    <h3>Locations per Organization</h3>
+    <table>
+      <tbody>
+        <% byOrganization.forEach(row => { %>
+        <tr>
+          <td><span class="swatch" style="background:<%= row.color %>"></span><%= row.name %></td>
+          <td><%= row.n %></td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <h3>Locations per Country</h3>
+    <table>
+      <tbody>
+        <% byCountry.forEach(row => { %>
+        <tr>
+          <td><%= row.country %></td>
+          <td><%= row.n %></td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="two-col">
+  <div>
+    <h3>Precision Breakdown</h3>
+    <table>
+      <tbody>
+        <% byPrecision.forEach(row => { %>
+        <tr>
+          <td><%= row.precision %></td>
+          <td><%= row.n %></td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <h3>Pins Added per Month</h3>
+    <table>
+      <tbody>
+        <% byMonth.forEach(row => { %>
+        <tr>
+          <td><%= row.month %></td>
+          <td><%= row.n %></td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
 <h2>Add a pin</h2>
 <div class="dash-actions">
   <a class="btn-primary" href="/admin/scrape">Scrape a URL</a>

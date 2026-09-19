@@ -99,7 +99,42 @@ function idsFromBody(body) {
 router.get('/', (req, res) => {
   const massCenterCount = db.prepare('SELECT COUNT(*) AS n FROM mass_centers').get().n;
   const organizationCount = db.prepare('SELECT COUNT(*) AS n FROM organizations').get().n;
-  res.render('admin/dashboard', { massCenterCount, organizationCount });
+
+  const byOrganization = db
+    .prepare(
+      `SELECT o.name, o.color, COUNT(mc.id) AS n
+       FROM organizations o LEFT JOIN mass_centers mc ON mc.organization_id = o.id
+       GROUP BY o.id ORDER BY n DESC`
+    )
+    .all();
+
+  // COALESCE covers pins added before the country column existed, or never
+  // re-geocoded since — see README/ROADMAP on backfill.
+  const byCountry = db
+    .prepare(
+      `SELECT COALESCE(country, 'Unknown') AS country, COUNT(*) AS n
+       FROM mass_centers GROUP BY country ORDER BY n DESC LIMIT 15`
+    )
+    .all();
+
+  const byPrecision = db.prepare('SELECT precision, COUNT(*) AS n FROM mass_centers GROUP BY precision ORDER BY n DESC').all();
+
+  const byMonth = db
+    .prepare(
+      `SELECT strftime('%Y-%m', created_at) AS month, COUNT(*) AS n
+       FROM mass_centers GROUP BY month ORDER BY month DESC LIMIT 12`
+    )
+    .all()
+    .reverse();
+
+  const pageViews = {
+    today: db.prepare("SELECT count FROM page_views WHERE date = date('now')").get()?.count || 0,
+    last7Days: db.prepare("SELECT COALESCE(SUM(count), 0) AS n FROM page_views WHERE date >= date('now', '-6 days')").get().n,
+    last30Days: db.prepare("SELECT COALESCE(SUM(count), 0) AS n FROM page_views WHERE date >= date('now', '-29 days')").get().n,
+    total: db.prepare('SELECT COALESCE(SUM(count), 0) AS n FROM page_views').get().n,
+  };
+
+  res.render('admin/dashboard', { massCenterCount, organizationCount, byOrganization, byCountry, byPrecision, byMonth, pageViews });
 });
 
 // --- Organizations -------------------------------------------------------
@@ -176,9 +211,9 @@ router.post('/mass-centers', async (req, res) => {
       });
     }
     db.prepare(
-      `INSERT INTO mass_centers (title, address, latitude, longitude, organization_id)
-       VALUES (?, ?, ?, ?, ?)`
-    ).run(title.trim(), address.trim(), coords.latitude, coords.longitude, organization_id || null);
+      `INSERT INTO mass_centers (title, address, latitude, longitude, organization_id, country)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(title.trim(), address.trim(), coords.latitude, coords.longitude, organization_id || null, coords.country || null);
     res.redirect('/admin/mass-centers');
   } catch (err) {
     res.render('admin/mass_centers', { massCenters: getMassCenters(), organizations: getOrganizations(), error: err.message });
@@ -210,7 +245,7 @@ router.post('/mass-centers/:id', async (req, res) => {
   if (!existing) return res.status(404).send('Not found');
 
   try {
-    let { latitude, longitude } = existing;
+    let { latitude, longitude, country } = existing;
     const manualCoords = parseManualCoords(manualLat, manualLng);
     const addressChanged = address.trim() !== existing.address;
     if (manualCoords) {
@@ -225,12 +260,12 @@ router.post('/mass-centers/:id', async (req, res) => {
           notice: null,
         });
       }
-      ({ latitude, longitude } = coords);
+      ({ latitude, longitude, country } = coords);
     }
     db.prepare(
-      `UPDATE mass_centers SET title = ?, address = ?, latitude = ?, longitude = ?, organization_id = ?, updated_at = datetime('now')
+      `UPDATE mass_centers SET title = ?, address = ?, latitude = ?, longitude = ?, organization_id = ?, country = ?, updated_at = datetime('now')
        WHERE id = ?`
-    ).run(title.trim(), address.trim(), latitude, longitude, organization_id || null, req.params.id);
+    ).run(title.trim(), address.trim(), latitude, longitude, organization_id || null, country || null, req.params.id);
     res.redirect(
       addressChanged && !manualCoords ? `/admin/mass-centers/${req.params.id}/edit?regeocoded=1` : '/admin/mass-centers'
     );
@@ -482,9 +517,9 @@ router.post('/candidates/:id/confirm', async (req, res) => {
     candidatePipeline.refreshMassCenterFromCandidate(match.massCenter, resolved);
   } else {
     db.prepare(
-      `INSERT INTO mass_centers (title, address, latitude, longitude, precision, organization_id, source_url)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    ).run(title.trim(), address.trim(), coords.latitude, coords.longitude, precision, candidate.organization_id, candidate.source_url);
+      `INSERT INTO mass_centers (title, address, latitude, longitude, precision, organization_id, source_url, country)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(title.trim(), address.trim(), coords.latitude, coords.longitude, precision, candidate.organization_id, candidate.source_url, candidate.country || null);
   }
   db.prepare("UPDATE scrape_candidates SET status = 'confirmed' WHERE id = ?").run(req.params.id);
   res.redirect('/admin/candidates');
@@ -529,10 +564,10 @@ router.post('/conflicts/:id/not-duplicate', (req, res) => {
   if (!candidate) return res.status(404).send('Not found');
   const info = db
     .prepare(
-      `INSERT INTO mass_centers (title, address, latitude, longitude, precision, organization_id, source_url)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO mass_centers (title, address, latitude, longitude, precision, organization_id, source_url, country)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(candidate.title.trim(), candidate.raw_address, candidate.latitude, candidate.longitude, candidate.precision, candidate.organization_id, candidate.source_url);
+    .run(candidate.title.trim(), candidate.raw_address, candidate.latitude, candidate.longitude, candidate.precision, candidate.organization_id, candidate.source_url, candidate.country || null);
   duplicates.dismissPair(candidate.conflict_mass_center_id, info.lastInsertRowid);
   db.prepare("UPDATE scrape_candidates SET status = 'confirmed' WHERE id = ?").run(candidate.id);
   res.redirect('/admin/conflicts');

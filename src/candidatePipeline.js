@@ -126,12 +126,13 @@ function refreshMassCenterFromCandidate(mc, candidate) {
     latitude: useNew ? candidate.latitude : mc.latitude,
     longitude: useNew ? candidate.longitude : mc.longitude,
     precision: useNew ? candidate.precision : mc.precision,
+    country: mc.country || candidate.country || null,
   };
   db.prepare(
-    `UPDATE mass_centers SET address = ?, latitude = ?, longitude = ?, precision = ?,
+    `UPDATE mass_centers SET address = ?, latitude = ?, longitude = ?, precision = ?, country = ?,
        source_url = COALESCE(?, source_url), updated_at = datetime('now')
      WHERE id = ?`
-  ).run(merged.address, merged.latitude, merged.longitude, merged.precision, candidate.source_url || null, mc.id);
+  ).run(merged.address, merged.latitude, merged.longitude, merged.precision, merged.country, candidate.source_url || null, mc.id);
   Object.assign(mc, merged);
   return mc;
 }
@@ -155,8 +156,8 @@ async function resolveReadyCandidates() {
     .all();
 
   const insertMassCenter = db.prepare(
-    `INSERT INTO mass_centers (title, address, latitude, longitude, precision, organization_id, source_url)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO mass_centers (title, address, latitude, longitude, precision, organization_id, source_url, country)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const markConfirmed = db.prepare("UPDATE scrape_candidates SET status = 'confirmed' WHERE id = ?");
   const markConflict = db.prepare("UPDATE scrape_candidates SET status = 'conflict', conflict_mass_center_id = ? WHERE id = ?");
@@ -180,7 +181,7 @@ async function resolveReadyCandidates() {
       summary.confirmed++;
       return;
     }
-    const info = insertMassCenter.run(c.title.trim(), c.raw_address, c.latitude, c.longitude, c.precision, c.organization_id, c.source_url);
+    const info = insertMassCenter.run(c.title.trim(), c.raw_address, c.latitude, c.longitude, c.precision, c.organization_id, c.source_url, c.country || null);
     centers.push({
       id: info.lastInsertRowid,
       title: c.title,

@@ -18,6 +18,7 @@ db.exec(schema);
 // existed before this migration was written, so add any missing ones here.
 const MIGRATIONS = [
   ['mass_centers', 'precision', "TEXT NOT NULL DEFAULT 'exact'"],
+  ['mass_centers', 'country', 'TEXT'],
   ['scrape_candidates', 'title', 'TEXT'],
   ['scrape_candidates', 'city', 'TEXT'],
   ['scrape_candidates', 'state', 'TEXT'],

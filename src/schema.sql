@@ -63,6 +63,14 @@ CREATE TABLE IF NOT EXISTS scrape_candidates (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Daily hit counter for the public map page (see src/routes/api.js), bumped
+-- once per /api/pins request. No cookies/IPs — a page-view count, not a
+-- unique-visitor count.
+CREATE TABLE IF NOT EXISTS page_views (
+  date TEXT PRIMARY KEY,
+  count INTEGER NOT NULL DEFAULT 0
+);
+
 -- Single-row settings for the automatic re-scrape job (src/scrapeScheduler.js).
 -- last_run_summary is a small JSON blob for display on the Scrape URL page.
 CREATE TABLE IF NOT EXISTS scrape_schedule (
