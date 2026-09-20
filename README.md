@@ -78,9 +78,24 @@ included `Dockerfile`.
    country — whichever of those the extractor captured — so a candidate still
    gets a pin (marked with its actual precision) instead of getting stuck.
 
+   Before either of those actually calls the geocoder, each candidate passes
+   a dedup gate (`src/candidatePipeline.js#gateForGeocoding`) so re-scraping
+   never burns a Nominatim call on something already on the map: address+title
+   text similarity (`src/duplicates.js`) auto-rejects near-identical repeats
+   outright, lets clearly-new listings straight through, and escalates the
+   ambiguous middle band to Jev (`src/jev.js`, needs `AI_GATEWAY_API_KEY` —
+   see `.env.example`) in one batched call. Whatever's still uncertain (or
+   whatever Jev isn't configured to judge) lands on `/admin/conflicts`
+   tagged with the confidence score, same queue used for post-geocode
+   cross-organization matches. Resolved geocodes are also cached by
+   normalized address, so the same address is never looked up twice.
+
 ## Data model
 
 - `organizations` — name, abbreviation, color
 - `mass_centers` — the pins: title, address, lat/lng, precision (exact/city/state/country), organization
 - `scrape_candidates` — listings found by scraping, pending review: title,
-  address, city/state/country, precision, organization, geocoded lat/lng
+  address, city/state/country, precision, organization, geocoded lat/lng,
+  plus `duplicate_score` when the dedup gate flagged a possible match
+- `geocode_cache` — normalized address -> resolved lat/lng/precision, so a
+  repeat scrape never re-geocodes an address already resolved

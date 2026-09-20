@@ -4,6 +4,13 @@
 const db = require('./db');
 const { scrapeCandidates } = require('./scraper');
 const duplicates = require('./duplicates');
+const jev = require('./jev');
+
+// Jev's returned probability (0..1, "same physical location") past which the
+// ambiguous middle band is resolved automatically instead of left for a
+// human — see gateForGeocoding.
+const JEV_REJECT_PROBABILITY = 0.9;
+const JEV_NEW_PROBABILITY = 0.1;
 
 // A rotating palette so auto-created organizations get visually distinct
 // colors rather than all defaulting to black.
@@ -202,10 +209,66 @@ async function resolveReadyCandidates() {
   return summary;
 }
 
+// Pre-geocode duplicate gate: runs before a batch of candidates is handed to
+// geocodeCascade, so Nominatim is only called for rows that actually need
+// it. isExactDuplicate (above) already catches byte-identical repeats at
+// scrape time; this catches near-duplicates (reworded titles, minor address
+// formatting drift) via string similarity, with Jev settling the pairs that
+// similarity alone can't call confidently.
+//
+// - High similarity (>= PRE_GEOCODE_REJECT_THRESHOLD): auto-marked
+//   'duplicate' against the matched pin, skipping geocoding entirely.
+// - Low similarity (< PRE_GEOCODE_NEW_THRESHOLD, or no existing pins at all):
+//   returned as a survivor — proceeds to geocoding unchanged.
+// - The middle band is batched into one Jev call. Jev >= JEV_REJECT_PROBABILITY
+//   resolves the same way as a high string-similarity match; <= JEV_NEW_PROBABILITY
+//   proceeds to geocoding; anything else (including Jev being unconfigured or
+//   failing) lands on /admin/conflicts tagged with the score, same queue used
+//   for post-geocode cross-organization matches.
+//
+// Returns the subset of `candidates` that should still be geocoded.
+async function gateForGeocoding(candidates) {
+  if (!candidates.length) return candidates;
+
+  const centers = db
+    .prepare(`SELECT mc.*, o.name AS organization_name FROM mass_centers mc LEFT JOIN organizations o ON o.id = mc.organization_id`)
+    .all();
+  const markDuplicate = db.prepare("UPDATE scrape_candidates SET status = 'duplicate', conflict_mass_center_id = ?, duplicate_score = ? WHERE id = ?");
+  const markConflict = db.prepare("UPDATE scrape_candidates SET status = 'conflict', conflict_mass_center_id = ?, duplicate_score = ? WHERE id = ?");
+
+  const survivors = [];
+  const ambiguous = [];
+  for (const c of candidates) {
+    const match = duplicates.findTextSimilarityMatch(c, centers);
+    if (!match) {
+      survivors.push(c);
+    } else if (match.score >= duplicates.PRE_GEOCODE_REJECT_THRESHOLD) {
+      markDuplicate.run(match.massCenter.id, match.score, c.id);
+    } else {
+      ambiguous.push({ candidate: c, match });
+    }
+  }
+  if (!ambiguous.length) return survivors;
+
+  const probabilities = await jev.judgeSameLocation(ambiguous.map((a) => ({ candidate: a.candidate, massCenter: a.match.massCenter })));
+  ambiguous.forEach((a, i) => {
+    const p = probabilities ? probabilities[i] : null;
+    if (p != null && p >= JEV_REJECT_PROBABILITY) {
+      markDuplicate.run(a.match.massCenter.id, p, a.candidate.id);
+    } else if (p != null && p <= JEV_NEW_PROBABILITY) {
+      survivors.push(a.candidate);
+    } else {
+      markConflict.run(a.match.massCenter.id, p != null ? p : a.match.score, a.candidate.id);
+    }
+  });
+  return survivors;
+}
+
 module.exports = {
   getOrCreateOrganizationByAbbreviation,
   isExactDuplicate,
   runScrape,
   refreshMassCenterFromCandidate,
   resolveReadyCandidates,
+  gateForGeocoding,
 };

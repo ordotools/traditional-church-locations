@@ -1,5 +1,12 @@
 const assert = require('assert');
-const { haversineMeters, titleSimilarity, normalizeAddress, isMorePrecise, findMassCenterMatch } = require('./duplicates');
+const {
+  haversineMeters,
+  titleSimilarity,
+  normalizeAddress,
+  isMorePrecise,
+  findMassCenterMatch,
+  findTextSimilarityMatch,
+} = require('./duplicates');
 
 // Same point → 0 distance.
 assert.strictEqual(haversineMeters(40, -75, 40, -75), 0);
@@ -45,5 +52,27 @@ assert.ok(diffOrgMatch && !diffOrgMatch.sameOrg, 'expected a cross-org conflict 
 // No address/geo overlap -> no match at all.
 const newPlaceCandidate = { raw_address: '999 Elsewhere Ave', latitude: 10, longitude: 10, organization_id: 1 };
 assert.strictEqual(findMassCenterMatch(newPlaceCandidate, existing), null);
+
+// findTextSimilarityMatch: pre-geocode gate, no coordinates involved at all.
+const textCenters = [{ id: 1, title: 'St. Mary Chapel', address: '123 Main St', organization_id: 1 }];
+
+// Near-identical text (minor formatting drift) -> scores above the reject
+// threshold, confident enough to skip geocoding entirely.
+const nearDup = findTextSimilarityMatch({ raw_address: '123 Main Street', title: 'St Mary Chapel', organization_id: 1 }, textCenters);
+assert.ok(nearDup && nearDup.score >= 0.9, `expected a confident match, got ${nearDup && nearDup.score}`);
+
+// Unrelated text -> no match reported at all (not even worth a "maybe").
+assert.strictEqual(
+  findTextSimilarityMatch({ raw_address: '999 Elsewhere Ave', title: 'Totally Different Place' }, textCenters),
+  null
+);
+
+// Reworded title at a similar-but-not-identical address -> ambiguous middle
+// band, reported with a score but below the auto-reject threshold.
+const ambiguous = findTextSimilarityMatch({ raw_address: '123 Main St Suite 9', title: 'Saint Marys' }, textCenters);
+assert.ok(ambiguous && ambiguous.score < 0.9 && ambiguous.score >= 0.55, `expected a mid-band score, got ${ambiguous && ambiguous.score}`);
+
+// No existing centers at all -> nothing to compare against.
+assert.strictEqual(findTextSimilarityMatch({ raw_address: '123 Main St', title: 'St. Mary Chapel' }, []), null);
 
 console.log('ok');

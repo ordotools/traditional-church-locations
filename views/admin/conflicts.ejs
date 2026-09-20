@@ -2,10 +2,11 @@
 
 <% if (error) { %><div class="error"><%= error %></div><% } %>
 
-<p class="muted">Scraped candidates whose address/location matched an existing pin, but under a different
-   organization — held here instead of publishing automatically. Either the location changed hands
-   (update the existing pin), or two organizations legitimately share this address (publish as a
-   separate pin).</p>
+<p class="muted">Scraped candidates that look like they might already be on the map, held here instead of
+   publishing automatically: either matched to an existing pin under a different organization
+   (post-geocode), or flagged as an ambiguous possible duplicate before geocoding even ran. Either
+   the location changed hands (update the existing pin), or it's genuinely a different place
+   (publish as a separate pin) — confirming either action geocodes it first if it hasn't been yet.</p>
 
 <% if (candidates.length === 0) { %>
   <p class="muted">No conflicts awaiting review.</p>
@@ -27,6 +28,12 @@
         <div class="muted"><%= c.existing_organization_name || '—' %></div>
       </div>
     </div>
+
+    <% if (c.duplicate_score != null) { %>
+      <div class="muted" style="margin-top:0.5rem;">
+        <%= c.latitude == null ? 'Flagged before geocoding' : 'Flagged' %> — suggested match confidence: <%= Math.round(c.duplicate_score * 100) %>%
+      </div>
+    <% } %>
 
     <div class="candidate-actions" style="margin-top:0.75rem;">
       <form method="post" action="/admin/conflicts/<%= c.id %>/update-existing" style="display:inline;">

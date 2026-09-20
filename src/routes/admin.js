@@ -566,6 +566,13 @@ router.post('/candidates/:id/confirm', async (req, res) => {
   }
 
   if (!coords) {
+    // Pre-geocode dedup gate: skip the Nominatim call if this candidate is
+    // (or is probably) a duplicate of something already on the map — see
+    // candidatePipeline.gateForGeocoding. A rejected/flagged candidate is
+    // updated in place, so just bounce back to the queue.
+    const survivors = await candidatePipeline.gateForGeocoding([{ ...candidate, raw_address: address.trim() }]);
+    if (!survivors.length) return res.redirect('/admin/candidates');
+
     // Not geocoded yet (or address just changed) — geocode now, on demand,
     // so confirming one at a time never has to wait for the background job.
     // Falls back through city/state/country if the full address can't be
@@ -627,6 +634,32 @@ router.post('/candidates/:id/reject', (req, res) => {
 // since it could mean the location changed hands or two organizations share
 // a building, and either way a human should decide before it reaches the map.
 
+// A conflict flagged by the pre-geocode dedup gate (string similarity or
+// Jev, before Nominatim ever ran — see candidatePipeline.gateForGeocoding)
+// has no coordinates yet. Both actions below need real coordinates (to
+// insert or update a mass_centers row, which requires them), so geocode on
+// demand here rather than during the background job — most of these get
+// rejected without ever needing a pin, so this way only the survivors that
+// a human actually confirms pay for a Nominatim call.
+async function ensureCandidateGeocoded(candidate) {
+  if (candidate.latitude != null) return candidate;
+  const result = await geocodeCascade({
+    address: candidate.raw_address,
+    postalCode: candidate.postal_code,
+    city: candidate.city,
+    state: candidate.state,
+    country: candidate.country,
+  });
+  if (!result) throw new Error('This address could not be geocoded. Edit it from the Scrape Review queue, then retry.');
+  db.prepare('UPDATE scrape_candidates SET latitude = ?, longitude = ?, precision = ? WHERE id = ?').run(
+    result.coords.latitude,
+    result.coords.longitude,
+    result.precision,
+    candidate.id
+  );
+  return { ...candidate, latitude: result.coords.latitude, longitude: result.coords.longitude, precision: result.precision };
+}
+
 function getConflictCandidates() {
   return db
     .prepare(
@@ -649,9 +682,14 @@ router.get('/conflicts', (req, res) => {
 
 // Genuinely a different place (e.g. two organizations sharing a building) —
 // publish it as its own pin, and remember the pair so it never re-flags.
-router.post('/conflicts/:id/not-duplicate', (req, res) => {
-  const candidate = db.prepare("SELECT * FROM scrape_candidates WHERE id = ? AND status = 'conflict'").get(req.params.id);
+router.post('/conflicts/:id/not-duplicate', async (req, res) => {
+  let candidate = db.prepare("SELECT * FROM scrape_candidates WHERE id = ? AND status = 'conflict'").get(req.params.id);
   if (!candidate) return res.status(404).send('Not found');
+  try {
+    candidate = await ensureCandidateGeocoded(candidate);
+  } catch (err) {
+    return res.render('admin/conflicts', { candidates: getConflictCandidates(), error: err.message });
+  }
   const info = db
     .prepare(
       `INSERT INTO mass_centers (title, address, latitude, longitude, precision, organization_id, source_url, country)
@@ -665,9 +703,14 @@ router.post('/conflicts/:id/not-duplicate', (req, res) => {
 
 // Same place — the organization changed (or was wrong to begin with); update
 // the existing pin from this candidate's data and drop the candidate.
-router.post('/conflicts/:id/update-existing', (req, res) => {
-  const candidate = db.prepare("SELECT * FROM scrape_candidates WHERE id = ? AND status = 'conflict'").get(req.params.id);
+router.post('/conflicts/:id/update-existing', async (req, res) => {
+  let candidate = db.prepare("SELECT * FROM scrape_candidates WHERE id = ? AND status = 'conflict'").get(req.params.id);
   if (!candidate) return res.status(404).send('Not found');
+  try {
+    candidate = await ensureCandidateGeocoded(candidate);
+  } catch (err) {
+    return res.render('admin/conflicts', { candidates: getConflictCandidates(), error: err.message });
+  }
   db.prepare(
     `UPDATE mass_centers SET title = ?, address = ?, latitude = ?, longitude = ?, precision = ?, organization_id = ?,
        source_url = ?, updated_at = datetime('now')

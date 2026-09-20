@@ -1,5 +1,6 @@
 const db = require('./db');
 const { geocodeCascade, sleep, BULK_INTERVAL_MS } = require('./geocode');
+const candidatePipeline = require('./candidatePipeline');
 
 // A single in-memory job, since this is a single-process app. Progress lives
 // in the scrape_candidates rows themselves (latitude IS NULL = not yet
@@ -15,13 +16,18 @@ function startGeocodingAllPending() {
   if (state.running) return state;
 
   const pending = db
-    .prepare("SELECT id, raw_address, city, state, country, postal_code FROM scrape_candidates WHERE status = 'approved' AND latitude IS NULL")
+    .prepare("SELECT * FROM scrape_candidates WHERE status = 'approved' AND latitude IS NULL")
     .all();
   state = { running: true, total: pending.length, done: 0, failed: 0 };
 
   (async () => {
+    // Dedup gate first: skip Nominatim entirely for rows that are already
+    // (or are probably) on the map — see candidatePipeline.gateForGeocoding.
+    const survivors = await candidatePipeline.gateForGeocoding(pending);
+    state.total = survivors.length;
+
     const update = db.prepare('UPDATE scrape_candidates SET latitude = ?, longitude = ?, precision = ? WHERE id = ?');
-    for (const row of pending) {
+    for (const row of survivors) {
       try {
         const result = await geocodeCascade({
           address: row.raw_address,

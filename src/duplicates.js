@@ -1,10 +1,20 @@
 const db = require('./db');
 
 // ponytail: plain nested-loop scan, fine up to a few thousand mass centers;
-// switch to a geo grid/index if the dataset grows past that.
+// switch to a geo grid/index (geohash prefix column, or an FTS5 trigram
+// index on normalized address) if the dataset grows past that. Also used as
+// the pre-geocode blocking set below, for the same reason.
 const DISTANCE_THRESHOLD_METERS = 150;
 const TITLE_SIMILARITY_THRESHOLD = 0.82;
 const EARTH_RADIUS_METERS = 6371000;
+
+// Pre-geocode gate thresholds (see findTextSimilarityMatch): combined
+// address+title similarity at or above REJECT is confident enough to skip
+// geocoding entirely; below NEW isn't worth reporting as even a maybe.
+// Between the two is genuinely ambiguous — escalate to Jev (see jev.js).
+const PRE_GEOCODE_REJECT_THRESHOLD = 0.9;
+const PRE_GEOCODE_NEW_THRESHOLD = 0.55;
+const ADDRESS_WEIGHT = 0.65;
 
 function toRadians(deg) {
   return (deg * Math.PI) / 180;
@@ -67,9 +77,9 @@ function isMorePrecise(a, b) {
 }
 
 // Standard Levenshtein edit distance, turned into a 0..1 similarity ratio.
-function titleSimilarity(a, b) {
-  const s1 = normalizeTitle(a);
-  const s2 = normalizeTitle(b);
+// Shared core for titleSimilarity/addressSimilarity below — the two only
+// differ in which normalizer they apply first.
+function levenshteinSimilarity(s1, s2) {
   if (!s1 && !s2) return 1;
   if (!s1 || !s2) return 0;
   if (s1 === s2) return 1;
@@ -86,6 +96,14 @@ function titleSimilarity(a, b) {
   }
   const editDistance = dist[rows - 1][cols - 1];
   return 1 - editDistance / Math.max(s1.length, s2.length);
+}
+
+function titleSimilarity(a, b) {
+  return levenshteinSimilarity(normalizeTitle(a), normalizeTitle(b));
+}
+
+function addressSimilarity(a, b) {
+  return levenshteinSimilarity(normalizeAddress(a), normalizeAddress(b));
 }
 
 function getDismissedPairKeys() {
@@ -175,6 +193,23 @@ function findMassCenterMatch(candidate, centers) {
   return pool[0];
 }
 
+// Text-only stand-in for findMassCenterMatch, for use before a candidate has
+// coordinates — the gate that decides whether a candidate is even worth
+// geocoding (see candidatePipeline.gateForGeocoding). Address similarity
+// carries more weight than title, matching findDuplicatePairs' judgment that
+// address is the stronger identity signal. Returns null when nothing scores
+// above the "new" floor — not worth reporting as even a maybe.
+function findTextSimilarityMatch(candidate, centers) {
+  const candidateAddress = candidate.raw_address || candidate.address;
+  let best = null;
+  for (const mc of centers) {
+    const score = addressSimilarity(candidateAddress, mc.address) * ADDRESS_WEIGHT + titleSimilarity(candidate.title, mc.title) * (1 - ADDRESS_WEIGHT);
+    if (!best || score > best.score) best = { massCenter: mc, score, sameOrg: (candidate.organization_id || null) === (mc.organization_id || null) };
+  }
+  if (!best || best.score < PRE_GEOCODE_NEW_THRESHOLD) return null;
+  return best;
+}
+
 function dismissPair(idA, idB) {
   const [id1, id2] = idA < idB ? [idA, idB] : [idB, idA];
   db.prepare('INSERT OR IGNORE INTO duplicate_dismissals (mass_center_id_1, mass_center_id_2) VALUES (?, ?)').run(
@@ -188,8 +223,12 @@ module.exports = {
   normalizeTitle,
   normalizeAddress,
   titleSimilarity,
+  addressSimilarity,
   isMorePrecise,
   findDuplicatePairs,
   findMassCenterMatch,
+  findTextSimilarityMatch,
   dismissPair,
+  PRE_GEOCODE_REJECT_THRESHOLD,
+  PRE_GEOCODE_NEW_THRESHOLD,
 };

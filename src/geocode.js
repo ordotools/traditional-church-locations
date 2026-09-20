@@ -1,6 +1,9 @@
 // Geocoding via the OpenStreetMap Nominatim public API (free, no API key).
 // Usage policy requires a real contact in the User-Agent and max 1 request/second:
 // https://operations.osmfoundation.org/policies/nominatim/
+const db = require('./db');
+const { normalizeAddress } = require('./duplicates');
+
 const CONTACT = process.env.GEOCODE_CONTACT || 'set-GEOCODE_CONTACT-env-var';
 const USER_AGENT = `traditional-church-locations/0.1 (${CONTACT})`;
 
@@ -45,6 +48,29 @@ async function geocodeStructured(fields) {
 // too, since they're just more requests to the same API in the same call.
 const CASCADE_STEP_DELAY_MS = 1100;
 
+// Cache key covers every field the cascade below can use — so "same street
+// address" and "no street, but same city/state/country" each cache
+// separately instead of colliding. Re-scraping the same site never re-hits
+// Nominatim for an address it already resolved.
+function cacheKey({ address, postalCode, city, state, country }) {
+  const key = normalizeAddress([address, postalCode, city, state, country].filter(Boolean).join(' '));
+  return key || null;
+}
+
+function getCachedCascade(key) {
+  if (!key) return null;
+  const row = db.prepare('SELECT latitude, longitude, precision FROM geocode_cache WHERE cache_key = ?').get(key);
+  return row ? { coords: { latitude: row.latitude, longitude: row.longitude }, precision: row.precision } : null;
+}
+
+function setCachedCascade(key, result) {
+  if (!key) return;
+  db.prepare(
+    `INSERT INTO geocode_cache (cache_key, latitude, longitude, precision) VALUES (?, ?, ?, ?)
+     ON CONFLICT(cache_key) DO UPDATE SET latitude = excluded.latitude, longitude = excluded.longitude, precision = excluded.precision`
+  ).run(key, result.coords.latitude, result.coords.longitude, result.precision);
+}
+
 // A full street address often can't be found (OpenStreetMap has real
 // coverage gaps — see README), which used to just leave a candidate stuck
 // unconfirmed. Instead, fall back to whatever's less specific: postal code,
@@ -53,6 +79,10 @@ const CASCADE_STEP_DELAY_MS = 1100;
 // tier that actually succeeded (which may be coarser than the input data
 // implied), or null if every available tier failed.
 async function geocodeCascade({ address, postalCode, city, state, country }) {
+  const key = cacheKey({ address, postalCode, city, state, country });
+  const cached = getCachedCascade(key);
+  if (cached) return cached;
+
   const attempts = [];
   if (address) attempts.push({ precision: 'exact', run: () => geocodeAddress(address) });
   if (postalCode) attempts.push({ precision: 'postal', run: () => geocodeStructured({ postalcode: postalCode, country }) });
@@ -63,7 +93,11 @@ async function geocodeCascade({ address, postalCode, city, state, country }) {
   for (let i = 0; i < attempts.length; i++) {
     if (i > 0) await sleep(CASCADE_STEP_DELAY_MS);
     const coords = await attempts[i].run();
-    if (coords) return { coords, precision: attempts[i].precision };
+    if (coords) {
+      const result = { coords, precision: attempts[i].precision };
+      setCachedCascade(key, result);
+      return result;
+    }
   }
   return null;
 }

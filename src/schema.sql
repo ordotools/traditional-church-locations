@@ -65,10 +65,24 @@ CREATE TABLE IF NOT EXISTS scrape_candidates (
   latitude REAL,
   longitude REAL,
   status TEXT NOT NULL DEFAULT 'pending',
-  -- Set when status = 'conflict': the existing mass center this candidate's
-  -- address/location matched under a different organization, awaiting a
-  -- human decision on /admin/conflicts.
+  -- Set when status = 'conflict' or 'duplicate': the existing mass center
+  -- this candidate's address/title matched (by string similarity, Jev, or
+  -- post-geocode distance), awaiting a human decision on /admin/conflicts —
+  -- or, for 'duplicate', kept only as an audit trail of the auto-reject.
   conflict_mass_center_id INTEGER REFERENCES mass_centers(id) ON DELETE SET NULL,
+  -- Similarity score (0..1) behind that match: string-similarity score for a
+  -- pre-geocode match, or Jev's probability when it was escalated there.
+  duplicate_score REAL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- normalized-address -> resolved coordinates, so re-scraping the same site
+-- never re-geocodes an address already resolved (see src/geocode.js).
+CREATE TABLE IF NOT EXISTS geocode_cache (
+  cache_key TEXT PRIMARY KEY,
+  latitude REAL NOT NULL,
+  longitude REAL NOT NULL,
+  precision TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
