@@ -3,6 +3,11 @@ CREATE TABLE IF NOT EXISTS organizations (
   name TEXT NOT NULL,
   abbreviation TEXT NOT NULL,
   color TEXT NOT NULL DEFAULT '#000000',
+  -- Vetting status shown as a badge on the map pin: 'vetted' (recommended),
+  -- 'questionable' (grey-listed), 'unknown' (not yet reviewed), 'blacklisted'
+  -- (not recommended). Locations belonging to this org inherit it unless
+  -- they set their own (see mass_centers.status).
+  status TEXT NOT NULL DEFAULT 'unknown',
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -15,6 +20,10 @@ CREATE TABLE IF NOT EXISTS mass_centers (
   precision TEXT NOT NULL DEFAULT 'exact',
   organization_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL,
   source_url TEXT,
+  -- '' (the default) means "inherit the organization's status"; set to one
+  -- of 'vetted'/'questionable'/'unknown'/'blacklisted' to override it for
+  -- just this location.
+  status TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -82,3 +91,18 @@ CREATE TABLE IF NOT EXISTS scrape_schedule (
   run_count INTEGER NOT NULL DEFAULT 0
 );
 INSERT OR IGNORE INTO scrape_schedule (id) VALUES (1);
+
+-- Per-status display settings, editable on /admin/statuses: the label shown
+-- for a status (e.g. blacklisted -> "Do not attend") and whether it's shown
+-- on the map popup and/or in the map legend at all.
+CREATE TABLE IF NOT EXISTS status_settings (
+  status TEXT PRIMARY KEY,
+  label TEXT NOT NULL,
+  show_on_map INTEGER NOT NULL DEFAULT 1,
+  show_in_legend INTEGER NOT NULL DEFAULT 1
+);
+INSERT OR IGNORE INTO status_settings (status, label) VALUES
+  ('vetted', 'Vetted'),
+  ('questionable', 'Questionable'),
+  ('unknown', 'Unknown'),
+  ('blacklisted', 'Blacklisted');

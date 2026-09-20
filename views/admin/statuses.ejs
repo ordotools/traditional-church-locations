@@ -1,0 +1,29 @@
+<%- include('../partials/header', { title: 'Statuses' }) %>
+
+<% if (error) { %><div class="error"><%= error %></div><% } %>
+
+<p class="muted">Controls the vetting-status labels and where they're shown on the public map.
+   The shape on the pin itself (circle/square/triangle/X) always shows regardless of these settings —
+   this only affects the text label in a location's popup and in the map legend.</p>
+
+<form method="post" action="/admin/statuses">
+  <table>
+    <thead>
+      <tr><th>Status</th><th>Display label</th><th>Show on map</th><th>Show in legend</th></tr>
+    </thead>
+    <tbody>
+      <% statuses.forEach(function(s) { %>
+        <tr>
+          <td><span class="status-badge status-<%= s.status %>"><%= s.status %></span></td>
+          <td><input type="text" name="label_<%= s.status %>" value="<%= s.label %>" required></td>
+          <td><input type="checkbox" name="show_on_map_<%= s.status %>" <%= s.show_on_map ? 'checked' : '' %>></td>
+          <td><input type="checkbox" name="show_in_legend_<%= s.status %>" <%= s.show_in_legend ? 'checked' : '' %>></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+
+  <button type="submit">Save</button>
+</form>
+
+<%- include('../partials/footer') %>

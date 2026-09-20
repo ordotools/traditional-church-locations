@@ -16,13 +16,20 @@
   <label for="color">Color</label>
   <input type="color" id="color" name="color" value="#111111">
 
+  <label for="status">Status <span class="muted">(default for this org's locations, unless a location overrides it)</span></label>
+  <select id="status" name="status">
+    <% statuses.forEach(function(s) { %>
+      <option value="<%= s %>" <%= s === 'unknown' ? 'selected' : '' %>><%= s %></option>
+    <% }) %>
+  </select>
+
   <button type="submit">Add Organization</button>
 </form>
 
 <h2>Existing organizations</h2>
 <table>
   <thead>
-    <tr><th>Color</th><th>Name</th><th>Abbreviation</th><th></th></tr>
+    <tr><th>Color</th><th>Name</th><th>Abbreviation</th><th>Status</th><th></th></tr>
   </thead>
   <tbody>
     <% organizations.forEach(function(org) { %>
@@ -30,6 +37,7 @@
         <td><span class="swatch" style="background:<%= org.color %>"></span></td>
         <td><%= org.name %></td>
         <td><%= org.abbreviation %></td>
+        <td><span class="status-badge status-<%= org.status %>"><%= org.status %></span></td>
         <td class="actions">
           <a href="/admin/organizations/<%= org.id %>/edit">Edit</a>
           &nbsp;
@@ -40,7 +48,7 @@
       </tr>
     <% }) %>
     <% if (organizations.length === 0) { %>
-      <tr><td colspan="4" class="muted">No organizations yet.</td></tr>
+      <tr><td colspan="5" class="muted">No organizations yet.</td></tr>
     <% } %>
   </tbody>
 </table>

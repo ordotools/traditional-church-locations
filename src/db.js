@@ -19,6 +19,8 @@ db.exec(schema);
 const MIGRATIONS = [
   ['mass_centers', 'precision', "TEXT NOT NULL DEFAULT 'exact'"],
   ['mass_centers', 'country', 'TEXT'],
+  ['mass_centers', 'status', "TEXT NOT NULL DEFAULT ''"],
+  ['organizations', 'status', "TEXT NOT NULL DEFAULT 'unknown'"],
   ['scrape_candidates', 'title', 'TEXT'],
   ['scrape_candidates', 'city', 'TEXT'],
   ['scrape_candidates', 'state', 'TEXT'],

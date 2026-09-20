@@ -12,6 +12,13 @@
   <label for="color">Color</label>
   <input type="color" id="color" name="color" value="<%= organization.color %>">
 
+  <label for="status">Status <span class="muted">(default for this org's locations, unless a location overrides it)</span></label>
+  <select id="status" name="status">
+    <% statuses.forEach(function(s) { %>
+      <option value="<%= s %>" <%= s === organization.status ? 'selected' : '' %>><%= s %></option>
+    <% }) %>
+  </select>
+
   <button type="submit">Save</button>
 </form>
 

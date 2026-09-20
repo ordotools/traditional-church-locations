@@ -15,6 +15,7 @@
       <a href="/admin" class="<%= isActive('/') ? 'active' : '' %>">Dashboard</a>
       <a href="/admin/mass-centers" class="<%= isActive('/mass-centers') ? 'active' : '' %>">Mass Centers</a>
       <a href="/admin/organizations" class="<%= isActive('/organizations') ? 'active' : '' %>">Organizations</a>
+      <a href="/admin/statuses" class="<%= isActive('/statuses') ? 'active' : '' %>">Statuses</a>
       <a href="/admin/scrape" class="<%= isActive('/scrape') ? 'active' : '' %>">Scrape URL</a>
       <a href="/admin/review" class="<%= isActive('/review') ? 'active' : '' %>">Scrape Review<% if (reviewCount) { %> <span class="badge"><%= reviewCount %></span><% } %></a>
       <a href="/admin/candidates" class="<%= isActive('/candidates') ? 'active' : '' %>">Geolocation Queue<% if (geolocationCount) { %> <span class="badge"><%= geolocationCount %></span><% } %></a>

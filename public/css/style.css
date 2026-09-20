@@ -536,6 +536,33 @@ body.admin .error {
   margin-right: 0.35em;
 }
 
+/* Vetting-status text pill — admin table and map popups only. The public
+   map itself encodes status as pin shape instead (see .pin-marker in
+   map.js/style.css), not color, since org color already owns that channel. */
+.status-badge {
+  display: inline-block;
+  padding: 0.1em 0.5em;
+  border-radius: 3px;
+  font-size: 0.85em;
+  text-transform: capitalize;
+}
+.status-badge.status-vetted {
+  background: #1d8a4a22;
+  color: #1d8a4a;
+}
+.status-badge.status-questionable {
+  background: #b8860022;
+  color: #b86000;
+}
+.status-badge.status-unknown {
+  background: #6b6b6b22;
+  color: #6b6b6b;
+}
+.status-badge.status-blacklisted {
+  background: #c0203022;
+  color: #c02030;
+}
+
 .stat-row {
   display: flex;
   gap: 1rem;
@@ -786,6 +813,32 @@ body.admin.login-page .container {
   margin: 0;
 }
 
+#legend-status {
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85em;
+}
+/* The `display: flex` above wins specificity over the UA [hidden] rule, so
+   it needs restating here or renderStatusLegend() hiding an empty legend
+   (every status set to not-show-in-legend) would have no visible effect. */
+#legend-status[hidden] {
+  display: none;
+}
+
+/* Neutral-colored copies of the same SVG shapes map.js draws for pins (see
+   STATUS_SHAPES) so the legend key always matches what's actually on the map. */
+.legend-shape {
+  width: 12px;
+  height: 12px;
+  color: #333;
+  vertical-align: middle;
+  margin-right: 0.35em;
+}
+
 /* Render map tiles in grayscale to keep the black-and-white theme. */
 .leaflet-tile-pane {
   filter: grayscale(1) contrast(1.05);
@@ -841,27 +894,59 @@ body.admin.login-page .container {
   border-radius: 0 !important;
 }
 
-.pin-marker {
-  position: relative;
-  border: 1px solid #111;
-  width: var(--pin-size, 10px);
-  height: var(--pin-size, 10px);
-  display: block;
-  /* --glow-blur/--glow-opacity (map.js) stay 0 while zoomed out and ramp
-     up near max zoom, so a cluster of pins doesn't fuzz together. */
-  box-shadow: 0 0 var(--glow-blur, 0px) calc(var(--glow-blur, 0px) * 0.25) currentColor;
+/* markerIcon's divIcon is bigger than the visible shape, purely to grow the
+   tap target; center the shape inside that invisible box. Leaflet positions
+   this element itself via leaflet.css's `.leaflet-marker-icon { position:
+   absolute }` (transform-based) — do NOT set position here, or every marker
+   falls into normal document flow and drifts further off its real spot the
+   more markers are added before it. */
+.pin-marker-hitbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.pin-marker::after {
-  content: '';
+/* Sized wrapper for the two stacked SVG copies below (Leaflet's hitbox above
+   is fixed at 30x30 purely for tap-target size, not the visible shape). */
+.pin-marker-wrap {
+  position: relative;
+  display: block;
+  width: var(--pin-size, 10px);
+  height: var(--pin-size, 10px);
+}
+
+.pin-marker,
+.pin-marker-ping {
   position: absolute;
   inset: 0;
-  background: inherit;
+  width: 100%;
+  height: 100%;
+}
+
+/* The vetting-status silhouette (circle/square/triangle/X, set in map.js's
+   STATUS_SHAPES) filled with the org color via the wrapper's inline `color`.
+   Real SVG paths, not a CSS clip-path div: clip-path clips away box-shadow/
+   filter effects applied to the SAME element, which is why an earlier
+   version's glow always came out as the original square regardless of the
+   shape drawn on top of it. A plain SVG shape has no such conflict. */
+.pin-marker {
+  /* --glow-blur (map.js) stays 0 while zoomed out and ramps up near max
+     zoom, so a cluster of pins doesn't fuzz together. drop-shadow (not
+     box-shadow) so the glow follows the actual SVG silhouette. */
+  filter: drop-shadow(0 0 var(--glow-blur, 0px) currentColor);
+}
+
+/* A second copy of the exact same shape, scaled up and faded out on a loop —
+   the "pulse" ripples outward in the real icon shape since it's the same
+   vector artwork, just transformed. */
+.pin-marker-ping {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* .glow-active (map.js) is only set once --glow-blur > 0, so the pulse
    isn't animating (invisibly) on every pin while zoomed out. */
-:root.glow-active .pin-marker::after {
+:root.glow-active .pin-marker-ping {
   animation: pin-pulse 1.8s ease-out infinite;
 }
 
@@ -877,15 +962,7 @@ body.admin.login-page .container {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  :root.glow-active .pin-marker::after {
+  :root.glow-active .pin-marker-ping {
     animation: none;
   }
-}
-
-/* markerIcon's divIcon is bigger than the visible dot, purely to grow the
-   tap target; center the dot inside that invisible box. */
-.pin-marker-hitbox {
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }

@@ -24,7 +24,7 @@
         <thead>
           <tr>
             <th><input type="checkbox" id="mc-select-all"></th>
-            <th>Title</th><th>Address</th><th>Organization</th><th></th>
+            <th>Title</th><th>Address</th><th>Organization</th><th>Status</th><th></th>
           </tr>
         </thead>
         <tbody id="mc-rows">
@@ -34,6 +34,10 @@
               <td><%= mc.title %></td>
               <td><%= mc.address %></td>
               <td><%= mc.organization_abbreviation || '' %></td>
+              <td>
+                <span class="status-badge status-<%= mc.effective_status %>"><%= mc.effective_status %></span>
+                <% if (!mc.status) { %><span class="muted">(inherited)</span><% } %>
+              </td>
               <td class="actions">
                 <a href="/admin/mass-centers/<%= mc.id %>/edit">Edit</a>
                 &nbsp;
@@ -46,7 +50,7 @@
             </tr>
           <% }) %>
           <% if (massCenters.length === 0) { %>
-            <tr><td colspan="5" class="muted">No mass centers yet.</td></tr>
+            <tr><td colspan="6" class="muted">No mass centers yet.</td></tr>
           <% } %>
         </tbody>
       </table>
@@ -70,6 +74,14 @@
         <option value="">—</option>
         <% organizations.forEach(function(org) { %>
           <option value="<%= org.id %>"><%= org.name %> (<%= org.abbreviation %>)</option>
+        <% }) %>
+      </select>
+
+      <label for="status">Status</label>
+      <select id="status" name="status">
+        <option value="" selected>Inherit from organization</option>
+        <% statuses.forEach(function(s) { %>
+          <option value="<%= s %>"><%= s %></option>
         <% }) %>
       </select>
 

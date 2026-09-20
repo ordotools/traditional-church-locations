@@ -9,6 +9,14 @@ const { checkCredentials, requireAuth } = require('../auth');
 
 const router = express.Router();
 
+const STATUSES = require('../statuses');
+function normalizeOrgStatus(status) {
+  return STATUSES.includes(status) ? status : 'unknown';
+}
+function normalizeLocationStatus(status) {
+  return STATUSES.includes(status) ? status : '';
+}
+
 // --- Auth ----------------------------------------------------------------
 // Registered before the requireAuth gate below so login itself stays reachable.
 
@@ -66,10 +74,21 @@ function getOrganizations() {
   return db.prepare('SELECT * FROM organizations ORDER BY name').all();
 }
 
+// Always returns one row per STATUSES entry, in that order, even if
+// status_settings is somehow missing one (schema.sql seeds all four, but
+// this keeps the admin page and API from breaking if a row is ever deleted).
+function getStatusSettings() {
+  const bySlug = new Map(db.prepare('SELECT * FROM status_settings').all().map((row) => [row.status, row]));
+  return STATUSES.map(
+    (status) => bySlug.get(status) || { status, label: status, show_on_map: 1, show_in_legend: 1 }
+  );
+}
+
 function getMassCenters() {
   return db
     .prepare(
-      `SELECT mc.*, o.name AS organization_name, o.abbreviation AS organization_abbreviation
+      `SELECT mc.*, o.name AS organization_name, o.abbreviation AS organization_abbreviation,
+              COALESCE(NULLIF(mc.status, ''), o.status, 'unknown') AS effective_status
        FROM mass_centers mc LEFT JOIN organizations o ON o.id = mc.organization_id
        ORDER BY mc.title`
     )
@@ -141,18 +160,23 @@ router.get('/', (req, res) => {
 
 router.get('/organizations', (req, res) => {
   const organizations = getOrganizations();
-  res.render('admin/organizations', { organizations, error: null });
+  res.render('admin/organizations', { organizations, statuses: STATUSES, error: null });
 });
 
 router.post('/organizations', (req, res) => {
-  const { name, abbreviation, color } = req.body;
+  const { name, abbreviation, color, status } = req.body;
   if (!name || !abbreviation) {
-    return res.render('admin/organizations', { organizations: getOrganizations(), error: 'Name and abbreviation are required.' });
+    return res.render('admin/organizations', {
+      organizations: getOrganizations(),
+      statuses: STATUSES,
+      error: 'Name and abbreviation are required.',
+    });
   }
-  db.prepare('INSERT INTO organizations (name, abbreviation, color) VALUES (?, ?, ?)').run(
+  db.prepare('INSERT INTO organizations (name, abbreviation, color, status) VALUES (?, ?, ?, ?)').run(
     name.trim(),
     abbreviation.trim(),
-    color || '#000000'
+    color || '#000000',
+    normalizeOrgStatus(status)
   );
   res.redirect('/admin/organizations');
 });
@@ -160,21 +184,23 @@ router.post('/organizations', (req, res) => {
 router.get('/organizations/:id/edit', (req, res) => {
   const organization = db.prepare('SELECT * FROM organizations WHERE id = ?').get(req.params.id);
   if (!organization) return res.status(404).send('Not found');
-  res.render('admin/organization_edit', { organization, error: null });
+  res.render('admin/organization_edit', { organization, statuses: STATUSES, error: null });
 });
 
 router.post('/organizations/:id', (req, res) => {
-  const { name, abbreviation, color } = req.body;
+  const { name, abbreviation, color, status } = req.body;
   if (!name || !abbreviation) {
     return res.render('admin/organization_edit', {
       organization: { ...req.body, id: req.params.id },
+      statuses: STATUSES,
       error: 'Name and abbreviation are required.',
     });
   }
-  db.prepare('UPDATE organizations SET name = ?, abbreviation = ?, color = ? WHERE id = ?').run(
+  db.prepare('UPDATE organizations SET name = ?, abbreviation = ?, color = ?, status = ? WHERE id = ?').run(
     name.trim(),
     abbreviation.trim(),
     color || '#000000',
+    normalizeOrgStatus(status),
     req.params.id
   );
   res.redirect('/admin/organizations');
@@ -185,18 +211,45 @@ router.post('/organizations/:id/delete', (req, res) => {
   res.redirect('/admin/organizations');
 });
 
+// --- Status display settings ----------------------------------------------
+// Per-status label + map/legend visibility, consumed by the public map via
+// GET /api/status-settings (src/routes/api.js).
+
+router.get('/statuses', (req, res) => {
+  res.render('admin/statuses', { statuses: getStatusSettings(), error: null });
+});
+
+router.post('/statuses', (req, res) => {
+  const upsert = db.prepare(
+    `INSERT INTO status_settings (status, label, show_on_map, show_in_legend) VALUES (?, ?, ?, ?)
+     ON CONFLICT(status) DO UPDATE SET label = excluded.label, show_on_map = excluded.show_on_map,
+       show_in_legend = excluded.show_in_legend`
+  );
+  STATUSES.forEach((status) => {
+    const label = (req.body[`label_${status}`] || '').trim() || status;
+    upsert.run(status, label, req.body[`show_on_map_${status}`] ? 1 : 0, req.body[`show_in_legend_${status}`] ? 1 : 0);
+  });
+  res.redirect('/admin/statuses');
+});
+
 // --- Mass centers --------------------------------------------------------
 
 router.get('/mass-centers', (req, res) => {
-  res.render('admin/mass_centers', { massCenters: getMassCenters(), organizations: getOrganizations(), error: null });
+  res.render('admin/mass_centers', {
+    massCenters: getMassCenters(),
+    organizations: getOrganizations(),
+    statuses: STATUSES,
+    error: null,
+  });
 });
 
 router.post('/mass-centers', async (req, res) => {
-  const { title, address, organization_id, latitude, longitude } = req.body;
+  const { title, address, organization_id, latitude, longitude, status } = req.body;
   if (!title || !address) {
     return res.render('admin/mass_centers', {
       massCenters: getMassCenters(),
       organizations: getOrganizations(),
+      statuses: STATUSES,
       error: 'Title and address are required.',
     });
   }
@@ -207,27 +260,53 @@ router.post('/mass-centers', async (req, res) => {
       return res.render('admin/mass_centers', {
         massCenters: getMassCenters(),
         organizations: getOrganizations(),
+        statuses: STATUSES,
         error: `Could not find coordinates for "${address}". You can enter latitude/longitude manually below instead.`,
       });
     }
     db.prepare(
-      `INSERT INTO mass_centers (title, address, latitude, longitude, organization_id, country)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(title.trim(), address.trim(), coords.latitude, coords.longitude, organization_id || null, coords.country || null);
+      `INSERT INTO mass_centers (title, address, latitude, longitude, organization_id, country, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      title.trim(),
+      address.trim(),
+      coords.latitude,
+      coords.longitude,
+      organization_id || null,
+      coords.country || null,
+      normalizeLocationStatus(status)
+    );
     res.redirect('/admin/mass-centers');
   } catch (err) {
-    res.render('admin/mass_centers', { massCenters: getMassCenters(), organizations: getOrganizations(), error: err.message });
+    res.render('admin/mass_centers', {
+      massCenters: getMassCenters(),
+      organizations: getOrganizations(),
+      statuses: STATUSES,
+      error: err.message,
+    });
   }
 });
 
 router.get('/mass-centers/:id/edit', (req, res) => {
-  const massCenter = db.prepare('SELECT * FROM mass_centers WHERE id = ?').get(req.params.id);
+  const massCenter = db
+    .prepare(
+      `SELECT mc.*, o.status AS organization_status
+       FROM mass_centers mc LEFT JOIN organizations o ON o.id = mc.organization_id
+       WHERE mc.id = ?`
+    )
+    .get(req.params.id);
   if (!massCenter) return res.status(404).send('Not found');
   const notice =
     req.query.regeocoded === '1'
       ? `Address changed — re-geocoded to ${massCenter.latitude.toFixed(5)}, ${massCenter.longitude.toFixed(5)}.`
       : null;
-  res.render('admin/mass_center_edit', { massCenter, organizations: getOrganizations(), error: null, notice });
+  res.render('admin/mass_center_edit', {
+    massCenter,
+    organizations: getOrganizations(),
+    statuses: STATUSES,
+    error: null,
+    notice,
+  });
 });
 
 router.post('/mass-centers/bulk-delete', (req, res) => {
@@ -240,7 +319,7 @@ router.post('/mass-centers/bulk-delete', (req, res) => {
 });
 
 router.post('/mass-centers/:id', async (req, res) => {
-  const { title, address, organization_id, latitude: manualLat, longitude: manualLng } = req.body;
+  const { title, address, organization_id, latitude: manualLat, longitude: manualLng, status } = req.body;
   const existing = db.prepare('SELECT * FROM mass_centers WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).send('Not found');
 
@@ -254,8 +333,9 @@ router.post('/mass-centers/:id', async (req, res) => {
       const coords = await geocodeAddress(address);
       if (!coords) {
         return res.render('admin/mass_center_edit', {
-          massCenter: { ...existing, title, address, organization_id },
+          massCenter: { ...existing, title, address, organization_id, status },
           organizations: getOrganizations(),
+          statuses: STATUSES,
           error: `Could not find coordinates for "${address}". You can enter latitude/longitude manually below instead.`,
           notice: null,
         });
@@ -263,16 +343,26 @@ router.post('/mass-centers/:id', async (req, res) => {
       ({ latitude, longitude, country } = coords);
     }
     db.prepare(
-      `UPDATE mass_centers SET title = ?, address = ?, latitude = ?, longitude = ?, organization_id = ?, country = ?, updated_at = datetime('now')
+      `UPDATE mass_centers SET title = ?, address = ?, latitude = ?, longitude = ?, organization_id = ?, country = ?, status = ?, updated_at = datetime('now')
        WHERE id = ?`
-    ).run(title.trim(), address.trim(), latitude, longitude, organization_id || null, country || null, req.params.id);
+    ).run(
+      title.trim(),
+      address.trim(),
+      latitude,
+      longitude,
+      organization_id || null,
+      country || null,
+      normalizeLocationStatus(status),
+      req.params.id
+    );
     res.redirect(
       addressChanged && !manualCoords ? `/admin/mass-centers/${req.params.id}/edit?regeocoded=1` : '/admin/mass-centers'
     );
   } catch (err) {
     res.render('admin/mass_center_edit', {
-      massCenter: { ...existing, title, address, organization_id },
+      massCenter: { ...existing, title, address, organization_id, status },
       organizations: getOrganizations(),
+      statuses: STATUSES,
       error: err.message,
       notice: null,
     });

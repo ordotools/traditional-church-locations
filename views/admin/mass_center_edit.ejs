@@ -20,6 +20,16 @@
     <% }) %>
   </select>
 
+  <label for="status">Status</label>
+  <select id="status" name="status">
+    <option value="" <%= !massCenter.status ? 'selected' : '' %>>
+      Inherit from organization<% if (massCenter.organization_status) { %> (currently <%= massCenter.organization_status %>)<% } %>
+    </option>
+    <% statuses.forEach(function(s) { %>
+      <option value="<%= s %>" <%= s === massCenter.status ? 'selected' : '' %>><%= s %></option>
+    <% }) %>
+  </select>
+
   <p class="muted">Current coordinates: <%= massCenter.latitude %>, <%= massCenter.longitude %></p>
   <label for="latitude">Latitude / Longitude <span class="muted">(optional — only to override; leave blank to keep current, or re-geocode by changing the address)</span></label>
   <div style="display:flex;gap:0.5rem;">
