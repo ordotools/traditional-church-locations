@@ -4,6 +4,7 @@ const { geocodeAddress, geocodeCascade } = require('../geocode');
 const geocodeQueue = require('../geocodeQueue');
 const duplicates = require('../duplicates');
 const candidatePipeline = require('../candidatePipeline');
+const sourceDecisions = require('../sourceDecisions');
 const scrapeScheduler = require('../scrapeScheduler');
 const { checkCredentials, requireAuth } = require('../auth');
 
@@ -386,39 +387,43 @@ function getSavedSources() {
     .all();
 }
 
-router.get('/scrape', (req, res) => {
+// Past accept/skip decisions for each source, keyed by saved_sources.id, for
+// the "Locations" list on each source's card (see sourceDecisions.js).
+function getDecisionsBySource(sources) {
+  const map = {};
+  sources.forEach((s) => {
+    map[s.id] = sourceDecisions.listForSource(s.url);
+  });
+  return map;
+}
+
+function renderScrapePage(res, error) {
+  const sources = getSavedSources();
   res.render('admin/scrape', {
     organizations: getOrganizations(),
-    sources: getSavedSources(),
-    error: null,
+    sources,
+    decisionsBySource: getDecisionsBySource(sources),
+    error,
   });
+}
+
+router.get('/scrape', (req, res) => {
+  renderScrapePage(res, null);
 });
 
 router.post('/scrape', async (req, res) => {
   const { url, organization_id } = req.body;
   if (!url) {
-    return res.render('admin/scrape', {
-      organizations: getOrganizations(),
-      sources: getSavedSources(),
-      error: 'URL is required.',
-    });
+    return renderScrapePage(res, 'URL is required.');
   }
   try {
     const { count, aiWarning } = await candidatePipeline.runScrape(url, organization_id);
     if (!count) {
-      return res.render('admin/scrape', {
-        organizations: getOrganizations(),
-        sources: getSavedSources(),
-        error: 'No addresses were found on that page.',
-      });
+      return renderScrapePage(res, 'No addresses were found on that page.');
     }
     res.redirect(`/admin/review${aiWarning ? `?ai_warning=${encodeURIComponent(aiWarning)}` : ''}`);
   } catch (err) {
-    res.render('admin/scrape', {
-      organizations: getOrganizations(),
-      sources: getSavedSources(),
-      error: err.message,
-    });
+    renderScrapePage(res, err.message);
   }
 });
 
@@ -429,19 +434,11 @@ router.post('/scrape/sources/:id/run', async (req, res) => {
   try {
     const { count, aiWarning } = await candidatePipeline.runScrape(source.url, source.organization_id);
     if (!count) {
-      return res.render('admin/scrape', {
-        organizations: getOrganizations(),
-        sources: getSavedSources(),
-        error: `No addresses were found on ${source.url}.`,
-      });
+      return renderScrapePage(res, `No addresses were found on ${source.url}.`);
     }
     res.redirect(`/admin/review${aiWarning ? `?ai_warning=${encodeURIComponent(aiWarning)}` : ''}`);
   } catch (err) {
-    res.render('admin/scrape', {
-      organizations: getOrganizations(),
-      sources: getSavedSources(),
-      error: err.message,
-    });
+    renderScrapePage(res, err.message);
   }
 });
 
@@ -478,6 +475,19 @@ router.post('/scrape/sources/:id/delete', (req, res) => {
   res.redirect('/admin/scrape');
 });
 
+// Flips a remembered location decision (approved <-> rejected) for this
+// source, so a corrected call takes effect on the next scrape.
+router.post('/scrape/sources/:id/decisions/:decisionId', (req, res) => {
+  const source = db.prepare('SELECT url FROM saved_sources WHERE id = ?').get(req.params.id);
+  if (!source) return res.status(404).send('Not found');
+  const decision = db
+    .prepare('SELECT * FROM source_location_decisions WHERE id = ? AND source_url = ?')
+    .get(req.params.decisionId, source.url);
+  if (!decision) return res.status(404).send('Not found');
+  sourceDecisions.setDecisionStatus(decision.id, decision.status === 'approved' ? 'rejected' : 'approved');
+  res.redirect('/admin/scrape');
+});
+
 // --- Stage 1: raw scrape review ---------------------------------------------
 // Freshly scraped candidates land here first (status 'pending'), before any
 // geocoding is attempted. A human skims titles/addresses/orgs for obvious
@@ -494,10 +504,14 @@ router.post('/review/bulk', (req, res) => {
   if (ids.length) {
     const placeholders = ids.map(() => '?').join(',');
     const newStatus = req.body.action === 'approve' ? 'approved' : 'rejected';
+    const rows = db
+      .prepare(`SELECT source_url, raw_address, title FROM scrape_candidates WHERE status = 'pending' AND id IN (${placeholders})`)
+      .all(...ids);
     db.prepare(`UPDATE scrape_candidates SET status = ? WHERE status = 'pending' AND id IN (${placeholders})`).run(
       newStatus,
       ...ids
     );
+    rows.forEach((r) => sourceDecisions.recordDecision(r.source_url, r.raw_address, r.title, newStatus));
   }
   res.redirect('/admin/review');
 });
@@ -520,9 +534,13 @@ router.post('/candidates/bulk-delete', (req, res) => {
   const ids = idsFromBody(req.body);
   if (ids.length) {
     const placeholders = ids.map(() => '?').join(',');
+    const rows = db
+      .prepare(`SELECT source_url, raw_address, title FROM scrape_candidates WHERE status = 'approved' AND id IN (${placeholders})`)
+      .all(...ids);
     db.prepare(`UPDATE scrape_candidates SET status = 'rejected' WHERE status = 'approved' AND id IN (${placeholders})`).run(
       ...ids
     );
+    rows.forEach((r) => sourceDecisions.recordDecision(r.source_url, r.raw_address, r.title, 'rejected'));
   }
   res.redirect('/admin/candidates');
 });
@@ -623,7 +641,9 @@ router.post('/candidates/:id/confirm', async (req, res) => {
 });
 
 router.post('/candidates/:id/reject', (req, res) => {
+  const candidate = db.prepare('SELECT source_url, raw_address, title FROM scrape_candidates WHERE id = ?').get(req.params.id);
   db.prepare("UPDATE scrape_candidates SET status = 'rejected' WHERE id = ?").run(req.params.id);
+  if (candidate) sourceDecisions.recordDecision(candidate.source_url, candidate.raw_address, candidate.title, 'rejected');
   res.redirect('/admin/candidates');
 });
 
@@ -730,7 +750,11 @@ router.post('/conflicts/:id/update-existing', async (req, res) => {
 });
 
 router.post('/conflicts/:id/reject', (req, res) => {
+  const candidate = db
+    .prepare("SELECT source_url, raw_address, title FROM scrape_candidates WHERE id = ? AND status = 'conflict'")
+    .get(req.params.id);
   db.prepare("UPDATE scrape_candidates SET status = 'rejected' WHERE id = ? AND status = 'conflict'").run(req.params.id);
+  if (candidate) sourceDecisions.recordDecision(candidate.source_url, candidate.raw_address, candidate.title, 'rejected');
   res.redirect('/admin/conflicts');
 });
 

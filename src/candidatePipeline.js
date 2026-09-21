@@ -5,6 +5,7 @@ const db = require('./db');
 const { scrapeCandidates } = require('./scraper');
 const duplicates = require('./duplicates');
 const jev = require('./jev');
+const sourceDecisions = require('./sourceDecisions');
 
 // Jev's returned probability (0..1, "same physical location") past which the
 // ambiguous middle band is resolved automatically instead of left for a
@@ -85,6 +86,14 @@ function isExactDuplicate(item, organizationId, existingMassCenters, existingCan
 // of an existing pin or unresolved candidate (see isExactDuplicate) — only
 // meant for scheduled re-scrapes, where the same page gets re-run regularly.
 //
+// Regardless of opts, every candidate is first checked against
+// source_location_decisions (see sourceDecisions.js) — a human's past
+// approve/skip choice for this exact address+title on this source_url. A
+// remembered 'rejected' skips insertion outright; a remembered 'approved'
+// inserts straight in as 'approved', bypassing the pending review queue —
+// this is what lets a re-scrape stop re-asking about locations already
+// triaged once.
+//
 // Throws if the fetch fails; returns { count, skipped, aiWarning } (count 0 =
 // none found; aiWarning set when AI was configured but ended up unused for
 // this page — see scraper.js).
@@ -109,10 +118,12 @@ async function runScrape(url, organizationId, opts = {}) {
   for (let i = 0; i < candidates.length; i++) {
     const c = candidates[i];
     const candidateOrgId = organizationId || getOrCreateOrganizationByAbbreviation(c.organizationAbbreviation);
-    if (dedupe && isExactDuplicate(c, candidateOrgId, existingMassCenters, existingCandidates)) {
+    const remembered = sourceDecisions.getDecision(url, c.address, c.title);
+    if (remembered === 'rejected' || (dedupe && isExactDuplicate(c, candidateOrgId, existingMassCenters, existingCandidates))) {
       skipped++;
     } else {
-      insert.run(url, candidateOrgId || null, c.title, c.address, c.city, c.state, c.country || null, c.postalCode || null, c.precision, status);
+      const candidateStatus = remembered === 'approved' ? 'approved' : status;
+      insert.run(url, candidateOrgId || null, c.title, c.address, c.city, c.state, c.country || null, c.postalCode || null, c.precision, candidateStatus);
       count++;
     }
     if (dedupe && i % CHUNK_SIZE === CHUNK_SIZE - 1) await yieldToEventLoop();

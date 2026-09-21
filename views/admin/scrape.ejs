@@ -108,6 +108,38 @@
           <button type="submit" class="secondary">Save</button>
         </form>
       </details>
+
+      <% const decisions = decisionsBySource[s.id] || []; %>
+      <% if (decisions.length) { %>
+        <details style="margin-top:0.5rem;">
+          <summary>Locations (<%= decisions.length %>)</summary>
+          <p class="muted">
+            Remembered from past scrapes of this source. An accepted or skipped location is applied automatically
+            the next time this source is scraped — toggle it here if that call was wrong.
+          </p>
+          <table>
+            <thead>
+              <tr><th>Title</th><th>Address</th><th>Status</th><th></th></tr>
+            </thead>
+            <tbody>
+              <% decisions.forEach(function(d) { %>
+                <tr>
+                  <td><%= d.title || '(no title found)' %></td>
+                  <td><%= d.raw_address %></td>
+                  <td><%= d.status === 'approved' ? 'Accepted' : 'Skipped' %></td>
+                  <td>
+                    <form method="post" action="/admin/scrape/sources/<%= s.id %>/decisions/<%= d.id %>">
+                      <button type="submit" class="secondary">
+                        <%= d.status === 'approved' ? 'Mark skipped' : 'Mark accepted' %>
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </details>
+      <% } %>
     </div>
   <% }) %>
 <% } %>

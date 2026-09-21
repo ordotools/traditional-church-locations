@@ -76,6 +76,23 @@ CREATE TABLE IF NOT EXISTS scrape_candidates (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Remembers whether a specific address+title scraped from a source was
+-- approved or skipped, keyed by the same normalized text duplicates.js uses
+-- for matching. Looked up on every future scrape of that source_url so the
+-- same accept/skip choice doesn't have to be made again (see
+-- sourceDecisions.js), and editable from the source's card on /admin/scrape.
+CREATE TABLE IF NOT EXISTS source_location_decisions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source_url TEXT NOT NULL,
+  normalized_address TEXT NOT NULL,
+  normalized_title TEXT NOT NULL DEFAULT '',
+  raw_address TEXT,
+  title TEXT,
+  status TEXT NOT NULL, -- 'approved' or 'rejected'
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (source_url, normalized_address, normalized_title)
+);
+
 -- normalized-address -> resolved coordinates, so re-scraping the same site
 -- never re-geocodes an address already resolved (see src/geocode.js).
 CREATE TABLE IF NOT EXISTS geocode_cache (
