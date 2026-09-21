@@ -711,12 +711,17 @@ router.post('/conflicts/:id/not-duplicate', async (req, res) => {
   } catch (err) {
     return res.render('admin/conflicts', { candidates: getConflictCandidates(), error: err.message });
   }
+  // The pre-geocode dedup gate (candidatePipeline.gateForGeocoding) can flag
+  // a conflict before a title was ever extracted, unlike resolveReadyCandidates'
+  // ready query — fall back to the raw address rather than crashing on
+  // `.trim()` of a null title (was taking the whole server down, see PR).
+  const title = (candidate.title && candidate.title.trim()) || candidate.raw_address;
   const info = db
     .prepare(
       `INSERT INTO mass_centers (title, address, latitude, longitude, precision, organization_id, source_url, country)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(candidate.title.trim(), candidate.raw_address, candidate.latitude, candidate.longitude, candidate.precision, candidate.organization_id, candidate.source_url, candidate.country || null);
+    .run(title, candidate.raw_address, candidate.latitude, candidate.longitude, candidate.precision, candidate.organization_id, candidate.source_url, candidate.country || null);
   duplicates.dismissPair(candidate.conflict_mass_center_id, info.lastInsertRowid);
   db.prepare("UPDATE scrape_candidates SET status = 'confirmed' WHERE id = ?").run(candidate.id);
   res.redirect('/admin/conflicts');
@@ -732,12 +737,25 @@ router.post('/conflicts/:id/update-existing', async (req, res) => {
   } catch (err) {
     return res.render('admin/conflicts', { candidates: getConflictCandidates(), error: err.message });
   }
+  // conflict_mass_center_id is ON DELETE SET NULL (see db.js) — the pin this
+  // candidate was flagged against may have since been merged/deleted from
+  // the Duplicates page, leaving nothing to update.
+  if (!candidate.conflict_mass_center_id) {
+    return res.render('admin/conflicts', {
+      candidates: getConflictCandidates(),
+      error: 'The existing pin this was flagged against no longer exists. Reject this candidate or publish it separately instead.',
+    });
+  }
+  // A candidate flagged by the pre-geocode dedup gate can have no title (see
+  // not-duplicate above) — keep the existing pin's title rather than
+  // crashing on `.trim()` of null or blanking it out.
+  const title = candidate.title && candidate.title.trim();
   db.prepare(
-    `UPDATE mass_centers SET title = ?, address = ?, latitude = ?, longitude = ?, precision = ?, organization_id = ?,
+    `UPDATE mass_centers SET title = COALESCE(?, title), address = ?, latitude = ?, longitude = ?, precision = ?, organization_id = ?,
        source_url = ?, updated_at = datetime('now')
      WHERE id = ?`
   ).run(
-    candidate.title.trim(),
+    title || null,
     candidate.raw_address,
     candidate.latitude,
     candidate.longitude,
