@@ -68,11 +68,22 @@ assert.strictEqual(
 );
 
 // Reworded title at a similar-but-not-identical address -> ambiguous middle
-// band, reported with a score but below the auto-reject threshold.
-const ambiguous = findTextSimilarityMatch({ raw_address: '123 Main St Suite 9', title: 'Saint Marys' }, textCenters);
+// band, reported with a score but below the auto-reject threshold. (Not
+// "123 Main St Suite 9" — normalizeAddress strips the suite, so that's
+// actually address-identical and correctly short-circuits to a score of 1.)
+const ambiguous = findTextSimilarityMatch({ raw_address: '123 Maple St', title: 'Saint Marys' }, textCenters);
 assert.ok(ambiguous && ambiguous.score < 0.9 && ambiguous.score >= 0.55, `expected a mid-band score, got ${ambiguous && ambiguous.score}`);
 
 // No existing centers at all -> nothing to compare against.
 assert.strictEqual(findTextSimilarityMatch({ raw_address: '123 Main St', title: 'St. Mary Chapel' }, []), null);
+
+// Exact address match wins outright even with a totally different title —
+// e.g. a human renamed a pin from its raw scraped address to its real name,
+// but the source still emits the address as the title on every re-scrape.
+// Address is the definitive identity signal (matches findMassCenterMatch's
+// post-geocode rule); title drift alone must never re-litigate it.
+const retitled = findTextSimilarityMatch({ raw_address: '123 Main Street', title: 'Completely Unrelated Text', organization_id: 1 }, textCenters);
+assert.strictEqual(retitled && retitled.score, 1);
+assert.ok(retitled.sameOrg);
 
 console.log('ok');

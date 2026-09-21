@@ -43,7 +43,7 @@
         <button type="submit" class="secondary">Not a duplicate — publish separately</button>
       </form>
       <form method="post" action="/admin/conflicts/<%= c.id %>/reject" style="display:inline;">
-        <button type="submit" class="secondary">Reject candidate</button>
+        <button type="submit" class="secondary" title="Keeps the existing pin as-is. Remembers this exact address/title/organization from this source so it won't ask again — unless a future scrape names a different organization here.">Reject candidate</button>
       </form>
     </div>
   </div>

@@ -201,9 +201,17 @@ function findMassCenterMatch(candidate, centers) {
 // above the "new" floor — not worth reporting as even a maybe.
 function findTextSimilarityMatch(candidate, centers) {
   const candidateAddress = candidate.raw_address || candidate.address;
+  const candidateAddressNorm = normalizeAddress(candidateAddress);
   let best = null;
   for (const mc of centers) {
-    const score = addressSimilarity(candidateAddress, mc.address) * ADDRESS_WEIGHT + titleSimilarity(candidate.title, mc.title) * (1 - ADDRESS_WEIGHT);
+    // An exact normalized-address match is definitive on its own — same as
+    // findMassCenterMatch's post-geocode rule — regardless of how much the
+    // title has drifted (e.g. a human retitled it from the raw address to
+    // its real name; the source still emits the old address-as-title text).
+    const addressMatch = Boolean(candidateAddressNorm) && candidateAddressNorm === normalizeAddress(mc.address);
+    const score = addressMatch
+      ? 1
+      : addressSimilarity(candidateAddress, mc.address) * ADDRESS_WEIGHT + titleSimilarity(candidate.title, mc.title) * (1 - ADDRESS_WEIGHT);
     if (!best || score > best.score) best = { massCenter: mc, score, sameOrg: (candidate.organization_id || null) === (mc.organization_id || null) };
   }
   if (!best || best.score < PRE_GEOCODE_NEW_THRESHOLD) return null;

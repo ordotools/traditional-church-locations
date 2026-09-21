@@ -76,21 +76,27 @@ CREATE TABLE IF NOT EXISTS scrape_candidates (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Remembers whether a specific address+title scraped from a source was
--- approved or skipped, keyed by the same normalized text duplicates.js uses
--- for matching. Looked up on every future scrape of that source_url so the
--- same accept/skip choice doesn't have to be made again (see
--- sourceDecisions.js), and editable from the source's card on /admin/scrape.
+-- Remembers whether a specific address+title+organization scraped from a
+-- source was approved or skipped, keyed by the same normalized text
+-- duplicates.js uses for matching. Looked up on every future scrape of that
+-- source_url so the same accept/skip choice doesn't have to be made again
+-- (see sourceDecisions.js), and editable from the source's card on
+-- /admin/scrape. organization_id is part of the key (sentinel -1 when the
+-- candidate had none) so a decision made about one organization at this
+-- address doesn't silently swallow a later scrape that names a *different*
+-- organization at the same address/title — that's what a real handover looks
+-- like, and it should still reach /admin/conflicts.
 CREATE TABLE IF NOT EXISTS source_location_decisions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   source_url TEXT NOT NULL,
   normalized_address TEXT NOT NULL,
   normalized_title TEXT NOT NULL DEFAULT '',
+  organization_id INTEGER NOT NULL DEFAULT -1,
   raw_address TEXT,
   title TEXT,
   status TEXT NOT NULL, -- 'approved' or 'rejected'
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE (source_url, normalized_address, normalized_title)
+  UNIQUE (source_url, normalized_address, normalized_title, organization_id)
 );
 
 -- normalized-address -> resolved coordinates, so re-scraping the same site

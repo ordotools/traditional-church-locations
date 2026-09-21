@@ -97,6 +97,16 @@ function isExactDuplicate(item, organizationId, existingMassCenters, existingCan
 // Throws if the fetch fails; returns { count, skipped, aiWarning } (count 0 =
 // none found; aiWarning set when AI was configured but ended up unused for
 // this page — see scraper.js).
+// A blank title is what a human would otherwise have to type in by hand to
+// get a candidate past the various "title required" gates (resolveReadyCandidates,
+// the conflict-resolution actions in admin.js) — so default it up front,
+// here at the one place every scraped candidate is inserted, instead of
+// leaving blank titles for every downstream consumer to guard against.
+function defaultTitle(organizationId, abbreviation) {
+  const abbr = abbreviation || db.prepare('SELECT abbreviation FROM organizations WHERE id = ?').get(organizationId || -1)?.abbreviation;
+  return abbr ? `${abbr} Mass Center` : 'Mass Center';
+}
+
 async function runScrape(url, organizationId, opts = {}) {
   const status = opts.status || 'pending';
   const dedupe = Boolean(opts.dedupe);
@@ -118,12 +128,13 @@ async function runScrape(url, organizationId, opts = {}) {
   for (let i = 0; i < candidates.length; i++) {
     const c = candidates[i];
     const candidateOrgId = organizationId || getOrCreateOrganizationByAbbreviation(c.organizationAbbreviation);
-    const remembered = sourceDecisions.getDecision(url, c.address, c.title);
+    const remembered = sourceDecisions.getDecision(url, c.address, c.title, candidateOrgId);
     if (remembered === 'rejected' || (dedupe && isExactDuplicate(c, candidateOrgId, existingMassCenters, existingCandidates))) {
       skipped++;
     } else {
       const candidateStatus = remembered === 'approved' ? 'approved' : status;
-      insert.run(url, candidateOrgId || null, c.title, c.address, c.city, c.state, c.country || null, c.postalCode || null, c.precision, candidateStatus);
+      const title = (c.title && c.title.trim()) || defaultTitle(candidateOrgId, c.organizationAbbreviation);
+      insert.run(url, candidateOrgId || null, title, c.address, c.city, c.state, c.country || null, c.postalCode || null, c.precision, candidateStatus);
       count++;
     }
     if (dedupe && i % CHUNK_SIZE === CHUNK_SIZE - 1) await yieldToEventLoop();
@@ -227,8 +238,13 @@ async function resolveReadyCandidates() {
 // formatting drift) via string similarity, with Jev settling the pairs that
 // similarity alone can't call confidently.
 //
-// - High similarity (>= PRE_GEOCODE_REJECT_THRESHOLD): auto-marked
-//   'duplicate' against the matched pin, skipping geocoding entirely.
+// - A different organization than the matched pin: straight to
+//   /admin/conflicts regardless of score — never auto-marked a duplicate,
+//   since that needs a human (see the sameOrg check in resolveReadyCandidates).
+// - High same-org similarity (>= PRE_GEOCODE_REJECT_THRESHOLD, which an exact
+//   address match always meets on its own — see findTextSimilarityMatch):
+//   auto-marked 'duplicate' against the matched pin, skipping geocoding
+//   entirely.
 // - Low similarity (< PRE_GEOCODE_NEW_THRESHOLD, or no existing pins at all):
 //   returned as a survivor — proceeds to geocoding unchanged.
 // - The middle band is batched into one Jev call. Jev >= JEV_REJECT_PROBABILITY
@@ -253,6 +269,13 @@ async function gateForGeocoding(candidates) {
     const match = duplicates.findTextSimilarityMatch(c, centers);
     if (!match) {
       survivors.push(c);
+    } else if (!match.sameOrg) {
+      // A different organization at what looks like the same place — same
+      // rule as the post-geocode conflict check in resolveReadyCandidates:
+      // this needs a human (location changed hands? two orgs share a
+      // building?), so it's never auto-marked a duplicate no matter how high
+      // the text-similarity score is.
+      markConflict.run(match.massCenter.id, match.score, c.id);
     } else if (match.score >= duplicates.PRE_GEOCODE_REJECT_THRESHOLD) {
       markDuplicate.run(match.massCenter.id, match.score, c.id);
     } else {
@@ -278,6 +301,7 @@ async function gateForGeocoding(candidates) {
 module.exports = {
   getOrCreateOrganizationByAbbreviation,
   isExactDuplicate,
+  defaultTitle,
   runScrape,
   refreshMassCenterFromCandidate,
   resolveReadyCandidates,

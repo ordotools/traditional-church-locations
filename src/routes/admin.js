@@ -506,13 +506,13 @@ router.post('/review/bulk', (req, res) => {
     const placeholders = ids.map(() => '?').join(',');
     const newStatus = req.body.action === 'approve' ? 'approved' : 'rejected';
     const rows = db
-      .prepare(`SELECT source_url, raw_address, title FROM scrape_candidates WHERE status = 'pending' AND id IN (${placeholders})`)
+      .prepare(`SELECT source_url, raw_address, title, organization_id FROM scrape_candidates WHERE status = 'pending' AND id IN (${placeholders})`)
       .all(...ids);
     db.prepare(`UPDATE scrape_candidates SET status = ? WHERE status = 'pending' AND id IN (${placeholders})`).run(
       newStatus,
       ...ids
     );
-    rows.forEach((r) => sourceDecisions.recordDecision(r.source_url, r.raw_address, r.title, newStatus));
+    rows.forEach((r) => sourceDecisions.recordDecision(r.source_url, r.raw_address, r.title, r.organization_id, newStatus));
   }
   res.redirect('/admin/review');
 });
@@ -536,12 +536,12 @@ router.post('/candidates/bulk-delete', (req, res) => {
   if (ids.length) {
     const placeholders = ids.map(() => '?').join(',');
     const rows = db
-      .prepare(`SELECT source_url, raw_address, title FROM scrape_candidates WHERE status = 'approved' AND id IN (${placeholders})`)
+      .prepare(`SELECT source_url, raw_address, title, organization_id FROM scrape_candidates WHERE status = 'approved' AND id IN (${placeholders})`)
       .all(...ids);
     db.prepare(`UPDATE scrape_candidates SET status = 'rejected' WHERE status = 'approved' AND id IN (${placeholders})`).run(
       ...ids
     );
-    rows.forEach((r) => sourceDecisions.recordDecision(r.source_url, r.raw_address, r.title, 'rejected'));
+    rows.forEach((r) => sourceDecisions.recordDecision(r.source_url, r.raw_address, r.title, r.organization_id, 'rejected'));
   }
   res.redirect('/admin/candidates');
 });
@@ -642,9 +642,9 @@ router.post('/candidates/:id/confirm', async (req, res) => {
 });
 
 router.post('/candidates/:id/reject', (req, res) => {
-  const candidate = db.prepare('SELECT source_url, raw_address, title FROM scrape_candidates WHERE id = ?').get(req.params.id);
+  const candidate = db.prepare('SELECT source_url, raw_address, title, organization_id FROM scrape_candidates WHERE id = ?').get(req.params.id);
   db.prepare("UPDATE scrape_candidates SET status = 'rejected' WHERE id = ?").run(req.params.id);
-  if (candidate) sourceDecisions.recordDecision(candidate.source_url, candidate.raw_address, candidate.title, 'rejected');
+  if (candidate) sourceDecisions.recordDecision(candidate.source_url, candidate.raw_address, candidate.title, candidate.organization_id, 'rejected');
   res.redirect('/admin/candidates');
 });
 
@@ -713,9 +713,9 @@ router.post('/conflicts/:id/not-duplicate', async (req, res) => {
   }
   // The pre-geocode dedup gate (candidatePipeline.gateForGeocoding) can flag
   // a conflict before a title was ever extracted, unlike resolveReadyCandidates'
-  // ready query — fall back to the raw address rather than crashing on
-  // `.trim()` of a null title (was taking the whole server down, see PR).
-  const title = (candidate.title && candidate.title.trim()) || candidate.raw_address;
+  // ready query — default it the same way runScrape does rather than
+  // crashing on `.trim()` of a null title (was taking the whole server down).
+  const title = (candidate.title && candidate.title.trim()) || candidatePipeline.defaultTitle(candidate.organization_id);
   const info = db
     .prepare(
       `INSERT INTO mass_centers (title, address, latitude, longitude, precision, organization_id, source_url, country)
@@ -768,12 +768,19 @@ router.post('/conflicts/:id/update-existing', async (req, res) => {
   res.redirect('/admin/conflicts');
 });
 
+// Also the "keep my existing pin as corrected, stop asking about this"
+// action: it leaves the existing mass_center untouched and remembers this
+// exact source_url + address + title + organization combination as rejected
+// (see sourceDecisions.js), so the *same* wrong org/title scraped again from
+// this source is silently dropped before it's even inserted next time — but
+// a scrape that later names a *different* organization at this address/title
+// falls outside that memory and lands back here as a fresh conflict.
 router.post('/conflicts/:id/reject', (req, res) => {
   const candidate = db
-    .prepare("SELECT source_url, raw_address, title FROM scrape_candidates WHERE id = ? AND status = 'conflict'")
+    .prepare("SELECT source_url, raw_address, title, organization_id FROM scrape_candidates WHERE id = ? AND status = 'conflict'")
     .get(req.params.id);
   db.prepare("UPDATE scrape_candidates SET status = 'rejected' WHERE id = ? AND status = 'conflict'").run(req.params.id);
-  if (candidate) sourceDecisions.recordDecision(candidate.source_url, candidate.raw_address, candidate.title, 'rejected');
+  if (candidate) sourceDecisions.recordDecision(candidate.source_url, candidate.raw_address, candidate.title, candidate.organization_id, 'rejected');
   res.redirect('/admin/conflicts');
 });
 

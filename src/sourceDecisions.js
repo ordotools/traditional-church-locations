@@ -4,6 +4,12 @@
 const db = require('./db');
 const duplicates = require('./duplicates');
 
+// Sentinel for "no organization on this candidate" — kept out of the real id
+// space (autoincrement ids start at 1) so it can sit in a NOT NULL column and
+// still work as an ON CONFLICT target (SQLite treats NULL as never equal to
+// NULL, which would defeat de-duping org-less decisions).
+const NO_ORG = -1;
+
 // Same identity used for exact-duplicate detection (candidatePipeline.js):
 // normalized address+title. An empty address is never a stable identity.
 function normalizedKey(address, title) {
@@ -12,26 +18,32 @@ function normalizedKey(address, title) {
   return { normalizedAddress, normalizedTitle: duplicates.normalizeTitle(title) };
 }
 
-function recordDecision(sourceUrl, address, title, status) {
+// organization_id is part of the identity, not just stored alongside it: a
+// decision recorded while the source listed org A must not silently apply if
+// a later scrape of the same address/title lists org B — that's what a real
+// organization taking over a location looks like, and it should still reach
+// /admin/conflicts instead of being swallowed by an old decision.
+function recordDecision(sourceUrl, address, title, organizationId, status) {
   const key = normalizedKey(address, title);
   if (!key) return;
   db.prepare(
-    `INSERT INTO source_location_decisions (source_url, normalized_address, normalized_title, raw_address, title, status, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
-     ON CONFLICT(source_url, normalized_address, normalized_title) DO UPDATE SET
+    `INSERT INTO source_location_decisions (source_url, normalized_address, normalized_title, organization_id, raw_address, title, status, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+     ON CONFLICT(source_url, normalized_address, normalized_title, organization_id) DO UPDATE SET
        raw_address = excluded.raw_address, title = excluded.title, status = excluded.status, updated_at = excluded.updated_at`
-  ).run(sourceUrl, key.normalizedAddress, key.normalizedTitle, address || null, title || null, status);
+  ).run(sourceUrl, key.normalizedAddress, key.normalizedTitle, organizationId ?? NO_ORG, address || null, title || null, status);
 }
 
-// Returns 'approved', 'rejected', or null if this address/title was never decided for this source.
-function getDecision(sourceUrl, address, title) {
+// Returns 'approved', 'rejected', or null if this address/title/organization
+// combination was never decided for this source.
+function getDecision(sourceUrl, address, title, organizationId) {
   const key = normalizedKey(address, title);
   if (!key) return null;
   const row = db
     .prepare(
-      'SELECT status FROM source_location_decisions WHERE source_url = ? AND normalized_address = ? AND normalized_title = ?'
+      'SELECT status FROM source_location_decisions WHERE source_url = ? AND normalized_address = ? AND normalized_title = ? AND organization_id = ?'
     )
-    .get(sourceUrl, key.normalizedAddress, key.normalizedTitle);
+    .get(sourceUrl, key.normalizedAddress, key.normalizedTitle, organizationId ?? NO_ORG);
   return row ? row.status : null;
 }
 

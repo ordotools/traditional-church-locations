@@ -38,4 +38,31 @@ for (const [table, column, definition] of MIGRATIONS) {
   }
 }
 
+// source_location_decisions gained organization_id as part of its unique key
+// (see schema.sql) — ALTER TABLE can add the column but can't change a UNIQUE
+// constraint, so a database that already had this table needs it rebuilt.
+// Existing rows get the -1 "no organization on record" sentinel; a decision
+// that was previously org-specific will re-surface once for re-review after
+// this runs, then gets remembered under the new, org-aware key.
+if (!db.prepare("PRAGMA table_info(source_location_decisions)").all().some((col) => col.name === 'organization_id')) {
+  db.exec(`
+    CREATE TABLE source_location_decisions_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      source_url TEXT NOT NULL,
+      normalized_address TEXT NOT NULL,
+      normalized_title TEXT NOT NULL DEFAULT '',
+      organization_id INTEGER NOT NULL DEFAULT -1,
+      raw_address TEXT,
+      title TEXT,
+      status TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE (source_url, normalized_address, normalized_title, organization_id)
+    );
+    INSERT INTO source_location_decisions_new (id, source_url, normalized_address, normalized_title, raw_address, title, status, updated_at)
+      SELECT id, source_url, normalized_address, normalized_title, raw_address, title, status, updated_at FROM source_location_decisions;
+    DROP TABLE source_location_decisions;
+    ALTER TABLE source_location_decisions_new RENAME TO source_location_decisions;
+  `);
+}
+
 module.exports = db;
