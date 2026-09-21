@@ -114,9 +114,15 @@ async function runScrape(url, organizationId, opts = {}) {
   const { candidates, aiWarning } = await scrapeCandidates(url);
   if (!candidates.length) return { count: 0, skipped: 0, aiWarning };
 
+  // A link-index source (see scraper.js/crawlIndex.js) tags each candidate
+  // with the actual page it was found on, not the index page itself — that's
+  // the URL used below for dedup and remembered decisions, so they key on
+  // the real parish page and stay correct across re-crawls of the index.
+  const candidateUrls = [...new Set(candidates.map((c) => c.sourceUrl || url))];
+
   const existingMassCenters = dedupe ? db.prepare('SELECT * FROM mass_centers').all() : [];
   const existingCandidates = dedupe
-    ? db.prepare('SELECT * FROM scrape_candidates WHERE source_url = ?').all(url)
+    ? db.prepare(`SELECT * FROM scrape_candidates WHERE source_url IN (${candidateUrls.map(() => '?').join(',')})`).all(...candidateUrls)
     : [];
 
   const insert = db.prepare(
@@ -127,14 +133,15 @@ async function runScrape(url, organizationId, opts = {}) {
   let skipped = 0;
   for (let i = 0; i < candidates.length; i++) {
     const c = candidates[i];
+    const candidateUrl = c.sourceUrl || url;
     const candidateOrgId = organizationId || getOrCreateOrganizationByAbbreviation(c.organizationAbbreviation);
-    const remembered = sourceDecisions.getDecision(url, c.address, c.title, candidateOrgId);
+    const remembered = sourceDecisions.getDecision(candidateUrl, c.address, c.title, candidateOrgId);
     if (remembered === 'rejected' || (dedupe && isExactDuplicate(c, candidateOrgId, existingMassCenters, existingCandidates))) {
       skipped++;
     } else {
       const candidateStatus = remembered === 'approved' ? 'approved' : status;
       const title = (c.title && c.title.trim()) || defaultTitle(candidateOrgId, c.organizationAbbreviation);
-      insert.run(url, candidateOrgId || null, title, c.address, c.city, c.state, c.country || null, c.postalCode || null, c.precision, candidateStatus);
+      insert.run(candidateUrl, candidateOrgId || null, title, c.address, c.city, c.state, c.country || null, c.postalCode || null, c.precision, candidateStatus);
       count++;
     }
     if (dedupe && i % CHUNK_SIZE === CHUNK_SIZE - 1) await yieldToEventLoop();

@@ -7,6 +7,7 @@ const jev = require('../jev');
 const candidatePipeline = require('../candidatePipeline');
 const sourceDecisions = require('../sourceDecisions');
 const scrapeScheduler = require('../scrapeScheduler');
+const { pageKeyFor } = require('../scraper');
 const { checkCredentials, requireAuth } = require('../auth');
 
 const router = express.Router();
@@ -398,12 +399,17 @@ function getDecisionsBySource(sources) {
   return map;
 }
 
+function getCrawlRules() {
+  return db.prepare('SELECT * FROM crawl_rules ORDER BY page_key').all();
+}
+
 function renderScrapePage(res, error) {
   const sources = getSavedSources();
   res.render('admin/scrape', {
     organizations: getOrganizations(),
     sources,
     decisionsBySource: getDecisionsBySource(sources),
+    crawlRules: getCrawlRules(),
     error,
   });
 }
@@ -473,6 +479,34 @@ router.post('/scrape/sources/:id', (req, res) => {
 
 router.post('/scrape/sources/:id/delete', (req, res) => {
   db.prepare('DELETE FROM saved_sources WHERE id = ?').run(req.params.id);
+  res.redirect('/admin/scrape');
+});
+
+// --- Crawl rules -------------------------------------------------------
+// "This page is a link index, not a directory" — see scrapers/crawlIndex.js.
+// Lets a page found after deploy (a new organization's site laid out the
+// same way fssp.com/locations/ was) get added without a code change.
+
+router.post('/scrape/crawl-rules', (req, res) => {
+  const { url, link_selector } = req.body;
+  if (!url || !link_selector || !link_selector.trim()) {
+    return renderScrapePage(res, 'A URL and a link selector are both required.');
+  }
+  let pageKey;
+  try {
+    pageKey = pageKeyFor(url);
+  } catch {
+    return renderScrapePage(res, 'That URL could not be parsed.');
+  }
+  db.prepare(
+    `INSERT INTO crawl_rules (page_key, link_selector) VALUES (?, ?)
+     ON CONFLICT(page_key) DO UPDATE SET link_selector = excluded.link_selector`
+  ).run(pageKey, link_selector.trim());
+  res.redirect('/admin/scrape');
+});
+
+router.post('/scrape/crawl-rules/:id/delete', (req, res) => {
+  db.prepare('DELETE FROM crawl_rules WHERE id = ?').run(req.params.id);
   res.redirect('/admin/scrape');
 });
 

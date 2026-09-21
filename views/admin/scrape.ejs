@@ -63,6 +63,37 @@
   <button type="submit" class="secondary" <%= scrapeStatus.running ? 'disabled' : '' %>>Run Now</button>
 </form>
 
+<h2>Crawl Rules</h2>
+<p class="muted">
+  For a page that's a link index rather than a directory — every entry links out to that location's own page
+  or site instead of listing an address itself (like an FSSP-style "locations" map or list page). Scraping a
+  matching URL follows every link matching the selector below and extracts from each destination instead of
+  the index page. A rule also applies to any page it links to that's <em>also</em> a link index, so one rule
+  on the page people actually land on is usually enough even if the real listing lives one click deeper.
+</p>
+
+<form method="post" action="/admin/scrape/crawl-rules">
+  <label for="crawl-rule-url">URL</label>
+  <input type="url" id="crawl-rule-url" name="url" placeholder="https://example.org/locations" required>
+
+  <label for="crawl-rule-selector">Link selector <span class="muted">(CSS selector matching the links to follow)</span></label>
+  <input type="text" id="crawl-rule-selector" name="link_selector" placeholder="article a[href]" required>
+
+  <button type="submit">Add Rule</button>
+</form>
+
+<% if (crawlRules.length) { %>
+  <% crawlRules.forEach(function(r) { %>
+    <div class="card">
+      <strong><%= r.page_key %></strong>
+      <div class="muted">Selector: <code><%= r.link_selector %></code></div>
+      <form method="post" action="/admin/scrape/crawl-rules/<%= r.id %>/delete" style="margin-top:0.5rem;">
+        <button type="submit" class="secondary">Remove</button>
+      </form>
+    </div>
+  <% }) %>
+<% } %>
+
 <% if (sources.length) { %>
   <h2>Previously Scraped URLs</h2>
   <p class="muted">Recorded automatically each time you scrape a URL. Add a title and note as a reminder of

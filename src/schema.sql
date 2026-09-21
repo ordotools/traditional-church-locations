@@ -41,6 +41,18 @@ CREATE TABLE IF NOT EXISTS saved_sources (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Admin-added "this page is a link index, not a directory" rules (see
+-- src/scrapers/crawlIndex.js), for a page found after the code shipped —
+-- alongside that file's built-in ones for the pages already known about.
+-- page_key is "hostname/path" lowercased (scraper.js's pageKeyFor), matching
+-- how a live scrape looks a page up.
+CREATE TABLE IF NOT EXISTS crawl_rules (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  page_key TEXT NOT NULL UNIQUE,
+  link_selector TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- A pair of mass_centers a human has looked at and decided are NOT
 -- duplicates of each other, so the duplicate scan stops flagging them again.
 -- mass_center_id_1 is always the smaller id, so each unordered pair has one row.
