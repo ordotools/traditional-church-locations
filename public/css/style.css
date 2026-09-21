@@ -263,13 +263,11 @@ body.admin table {
   flex: 1;
 }
 
-/* Without this, the select's width:100% (from the shared rule below) makes
-   it claim the whole row as its flex-basis, leaving nothing for the search
-   box above to grow into. */
+/* Fixed width instead of auto — auto sizes the select to its longest
+   option (a long org name), which crushes the search box beside it. */
 body.admin .list-filters select {
-  flex: 0 0 auto;
-  width: auto;
-  min-width: 190px;
+  flex: 0 0 200px;
+  width: 200px;
 }
 
 .scroll-table {
@@ -293,6 +291,12 @@ body.admin .list-filters select {
   display: grid;
   grid-template-columns: 3fr 2fr;
   gap: 2rem;
+}
+
+/* Mass centers' right column is just a short form — give the table (left)
+   the room instead of splitting 3:2, which crushes the address column. */
+body.admin.fit-viewport .two-col {
+  grid-template-columns: minmax(0, 1fr) 340px;
 }
 
 .two-col .scroll-table {

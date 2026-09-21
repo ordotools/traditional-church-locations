@@ -20,6 +20,10 @@
       <% if (!p.sameOrg) { %> · <strong>different organizations</strong><% } %>
     </div>
 
+    <% if (p.jevScore != null) { %>
+      <div class="muted">Jev match confidence: <%= Math.round(p.jevScore * 100) %>%</div>
+    <% } %>
+
     <div class="dup-columns">
       <% [p.a, p.b].forEach(function(c) { %>
         <div class="dup-column">

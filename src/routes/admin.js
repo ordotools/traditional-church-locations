@@ -3,6 +3,7 @@ const db = require('../db');
 const { geocodeAddress, geocodeCascade } = require('../geocode');
 const geocodeQueue = require('../geocodeQueue');
 const duplicates = require('../duplicates');
+const jev = require('../jev');
 const candidatePipeline = require('../candidatePipeline');
 const sourceDecisions = require('../sourceDecisions');
 const scrapeScheduler = require('../scrapeScheduler');
@@ -764,8 +765,20 @@ router.post('/conflicts/:id/reject', (req, res) => {
 // compared and accepted as separate, rejected as the same place picking one
 // side, or merged field-by-field.
 
-router.get('/duplicates', (req, res) => {
-  res.render('admin/duplicates', { pairs: duplicates.findDuplicatePairs(), organizations: getOrganizations(), error: null });
+// Pairs with an exact address match are already confident; the rest (geo-close
+// or title-similar only) are the ambiguous middle band Jev is good at — same
+// pattern as candidatePipeline.gateForGeocoding, but purely advisory here since
+// deleting a confirmed pin is a human call, never automatic.
+async function withJevScores(pairs) {
+  const ambiguous = pairs.filter((p) => !p.addressMatch);
+  if (!ambiguous.length) return pairs;
+  const probabilities = await jev.judgeSameLocation(ambiguous.map((p) => ({ candidate: p.a, massCenter: p.b })));
+  if (probabilities) ambiguous.forEach((p, i) => { p.jevScore = probabilities[i]; });
+  return pairs;
+}
+
+router.get('/duplicates', async (req, res) => {
+  res.render('admin/duplicates', { pairs: await withJevScores(duplicates.findDuplicatePairs()), organizations: getOrganizations(), error: null });
 });
 
 // Not actually duplicates — stop flagging this pair.
@@ -785,7 +798,7 @@ router.post('/duplicates/:idA/:idB/keep/:keepId', (req, res) => {
 });
 
 // Same place, but combine fields from both before deleting the loser.
-router.post('/duplicates/:idA/:idB/merge', (req, res) => {
+router.post('/duplicates/:idA/:idB/merge', async (req, res) => {
   const idA = Number(req.params.idA);
   const idB = Number(req.params.idB);
   const keepId = Number(req.body.keep_id);
@@ -804,7 +817,7 @@ router.post('/duplicates/:idA/:idB/merge', (req, res) => {
     res.redirect('/admin/duplicates');
   } catch (err) {
     res.render('admin/duplicates', {
-      pairs: duplicates.findDuplicatePairs(),
+      pairs: await withJevScores(duplicates.findDuplicatePairs()),
       organizations: getOrganizations(),
       error: err.message,
     });

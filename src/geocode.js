@@ -16,8 +16,13 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function geocodeAddress(address) {
-  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q=${encodeURIComponent(address)}`;
+// Nominatim's policy floor (1 req/sec) applies between these fallback steps
+// too, since they're just more requests to the same API in the same call.
+// Also used as the delay between geocodeCascade's structured-field tiers below.
+const CASCADE_STEP_DELAY_MS = 1100;
+
+async function geocodeOnce(query) {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q=${encodeURIComponent(query)}`;
   const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
   if (!res.ok) throw new Error(`Geocoding request failed with status ${res.status}`);
   const results = await res.json();
@@ -27,6 +32,22 @@ async function geocodeAddress(address) {
     longitude: parseFloat(results[0].lon),
     country: results[0].address?.country || null,
   };
+}
+
+// A full freeform address often can't be found as-is (OpenStreetMap has real
+// coverage gaps — see README) even though a coarser version of the same
+// string would resolve fine, e.g. "Ugabi Street, Ewea Quarters, Agenebode,
+// Nigeria" fails but "Agenebode, Nigeria" succeeds. Retry by progressively
+// dropping the leading comma-separated segment, so this bottoms out at
+// whatever's last in the string — normally the country — before giving up.
+async function geocodeAddress(address) {
+  const segments = address.split(',').map((s) => s.trim()).filter(Boolean);
+  for (let i = 0; i < segments.length; i++) {
+    if (i > 0) await sleep(CASCADE_STEP_DELAY_MS);
+    const coords = await geocodeOnce(segments.slice(i).join(', '));
+    if (coords) return coords;
+  }
+  return null;
 }
 
 // Nominatim's "structured" search — city/state/country passed as separate
@@ -43,10 +64,6 @@ async function geocodeStructured(fields) {
   if (!results.length) return null;
   return { latitude: parseFloat(results[0].lat), longitude: parseFloat(results[0].lon) };
 }
-
-// Nominatim's policy floor (1 req/sec) applies between these cascade steps
-// too, since they're just more requests to the same API in the same call.
-const CASCADE_STEP_DELAY_MS = 1100;
 
 // Cache key covers every field the cascade below can use — so "same street
 // address" and "no street, but same city/state/country" each cache
